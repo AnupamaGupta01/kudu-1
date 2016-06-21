@@ -541,7 +541,29 @@ cd build/release
 ../../thirdparty/installed/bin/cmake -DCMAKE_BUILD_TYPE=release ../..
 make -j4
 ----
+.Proper Dependencies
+[NOTE]
+====
+If different versions of the dependencies are installed and used when calling
+`thirdparty/build-if-necessary.sh`, you may run into output similar to the following:
 
+----
+./configure: line 16299: error near unexpected token `newline'
+./configure: line 16299: `  PKG_CHECK_MODULES('
+----
+
+The thirdparty builds may be cached and may reflect the incorrect versions of the
+dependencies. Completely remove them and reinstall the correct dependencies.
+
+[source,bash]
+----
+$ git clean -fdx
+$ brew uninstall autoconf automake cmake libtool pkg-config boost pstree
+$ brew install autoconf automake cmake libtool pkg-config boost pstree
+----
+
+Continue starting from Step 3.
+====
 .OSX Build Script
 ====
 This script provides an overview of the procedure to build Kudu on OSX, and can
