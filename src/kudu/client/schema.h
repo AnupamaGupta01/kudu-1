@@ -176,6 +176,15 @@ class KUDU_EXPORT KuduColumnSpec {
   // Note that not all encodings are supported for all column types.
   KuduColumnSpec* Encoding(KuduColumnStorageAttributes::EncodingType encoding);
 
+  // @andrwng
+  // Set this column to be bitmapped (default off)
+  // Column bitmapping should only be supported if the the column has a limited number
+  // of unique values
+  //
+  // TODO: restrict this to only happen when dictionary encoding occurs? 
+  // or if dictionary encoding is true, we can, perhaps, utilize its methods
+  KuduColumnSpec* Bitmapped();
+
   // Set the target block size for this column.
   //
   // This is the number of bytes of user data packed per block on disk, and

@@ -60,6 +60,11 @@ void BitmapChangeBits(uint8_t *bitmap, size_t offset, size_t num_bits, bool valu
   }
 }
 
+std::vector<int> BitmapFindAll(const uint8_t *bitmap, size_t offset, 
+                               size_t bitmap_size, bool value, size_t *idx) {
+  
+}
+
 bool BitmapFindFirst(const uint8_t *bitmap, size_t offset, size_t bitmap_size,
                      bool value, size_t *idx) {
   const uint64_t pattern64[2] = { 0xffffffffffffffff, 0x0000000000000000 };

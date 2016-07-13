@@ -246,6 +246,7 @@ ColumnSchema ColumnSchemaFromPB(const ColumnSchemaPB& pb) {
   }
 
   ColumnStorageAttributes attributes;
+  
   if (pb.has_encoding()) {
     attributes.encoding = pb.encoding();
   }
@@ -255,7 +256,10 @@ ColumnSchema ColumnSchemaFromPB(const ColumnSchemaPB& pb) {
   if (pb.has_cfile_block_size()) {
     attributes.cfile_block_size = pb.cfile_block_size();
   }
-  return ColumnSchema(pb.name(), pb.type(), pb.is_nullable(),
+  // @andrwng
+  // attributes.is_bitmapped is defaulted to false, so no need to check whether
+  attributes.is_bitmapped = pb.bitmap();
+  return ColumnSchema(pb.name(), pb.type(), pb.is_nullable(), pb.is_bitmapped(),
                       read_default_ptr, write_default_ptr,
                       attributes);
 }
@@ -268,6 +272,8 @@ Status ColumnPBsToSchema(const RepeatedPtrField<ColumnSchemaPB>& column_pbs,
   columns.reserve(column_pbs.size());
   int num_key_columns = 0;
   bool is_handling_key = true;
+  // go through the columns and ensure that the column is an actual key,
+  // ensuring that they are in order (ordering ensures no deadlock (?))
   for (const ColumnSchemaPB& pb : column_pbs) {
     columns.push_back(ColumnSchemaFromPB(pb));
     if (pb.is_key()) {

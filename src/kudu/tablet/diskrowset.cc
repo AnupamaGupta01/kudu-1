@@ -90,12 +90,40 @@ Status DiskRowSetWriter::Open() {
   // Open bloom filter.
   RETURN_NOT_OK(InitBloomFileWriter());
 
+  // Check the ColumnSchema for where the column bitmaps would be generated
+  // iterate through the Schema's std::vector<ColumnSchema> ->is_bitmapped()
+  // InitColumnBitmaps for the given 
+  RETURN_NOT_OK(InitBitmapWriter());
+
   if (schema_->num_key_columns() > 1) {
     // Open ad-hoc index writer
     RETURN_NOT_OK(InitAdHocIndexWriter());
   }
 
   return Status::OK();
+}
+
+// @andrwng
+Status DiskRowSetWriter::InitBitmapWriter() {
+  gscoped_ptr<WriteableBlock> block;
+  FsManager* fs = rowset_metadata_->fs_manager();
+  RETURN_NOT_OK_PREPEND(fs->CreateNewBlock(&block),
+                        "Couldn't allocate a block for bitmap index");
+  rowset_metadata_->set_bitmap_index_block(block->id());
+
+  /*
+   for (ColumnSchema& col: schema_) {
+      if (col->is_bitmapped()) {
+        // bitmap_writer for the given column
+
+      }
+   }
+   */
+  // bitmap_writers_.push_back(new BitmapFileWriter(opts,
+                                               // GetTypeInfo(BINARY)
+                                               // false,
+                                               // std::move(block)))
+  return 
 }
 
 Status DiskRowSetWriter::InitBloomFileWriter() {

@@ -121,12 +121,14 @@ class ColumnSchema {
   //   Slice default_str("Hello");
   //   ColumnSchema col_d("d", STRING, false, &default_str);
   ColumnSchema(string name, DataType type, bool is_nullable = false,
+               bool is_bitmapped = false,
                const void* read_default = NULL,
                const void* write_default = NULL,
                ColumnStorageAttributes attributes = ColumnStorageAttributes())
       : name_(std::move(name)),
         type_info_(GetTypeInfo(type)),
         is_nullable_(is_nullable),
+        is_bitmapped_(is_bitmapped),
         read_default_(read_default ? new Variant(type, read_default) : NULL),
         attributes_(std::move(attributes)) {
     if (write_default == read_default) {
@@ -139,6 +141,11 @@ class ColumnSchema {
 
   const TypeInfo* type_info() const {
     return type_info_;
+  }
+
+  // @andrwng
+  bool is_bitmapped() const {
+    return is_bitmapped_;
   }
 
   bool is_nullable() const {
@@ -232,6 +239,9 @@ class ColumnSchema {
   // associated with the column schema. The reason they are kept in a separate
   // struct is so that in the future, they may be moved out to a more
   // appropriate location as opposed to parts of ColumnSchema.
+
+  // @andrwng: the ColumnStorageAttributes should also tell us whether the
+  // column is bitmap indexed or not. DONE. see attributes().is_bitmapped
   const ColumnStorageAttributes& attributes() const {
     return attributes_;
   }
@@ -281,6 +291,8 @@ class ColumnSchema {
   string name_;
   const TypeInfo *type_info_;
   bool is_nullable_;
+  // @andrwng
+  bool is_bitmapped_;
   // use shared_ptr since the ColumnSchema is always copied around.
   std::shared_ptr<Variant> read_default_;
   std::shared_ptr<Variant> write_default_;

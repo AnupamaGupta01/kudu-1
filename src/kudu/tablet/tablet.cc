@@ -233,6 +233,18 @@ Status Tablet::Open() {
                                               mem_tracker_));
   components_ = new TabletComponents(new_mrs, new_rowset_tree);
 
+  // TODO: @andrwng
+  // shared_ptr<RowSetBitmapVector> new_rowset_bimap_vector(new RowSetBitmapVector());
+  // // The RowSetBitmapVector should have numerous bitmaps, one for each column to be indexed
+  // * I'm thinking that the bitmaps should be specific to the column
+  //     Whereas the rowset_tree has a single primary key, we may need multiple bitmaps for the
+  //     multiple columns, depending on what is specified by the user
+  shared_ptr<RowSetBitmap> new_rowset_bitmap(new RowSetBitmap());
+  CHECK_OK(new_rowset_tree->Reset(rowsets_opened));
+  // TODO: decide whether the bitmap is needed as a part of the TabletComponents
+  // * gut feeling is no, since it is not a crucial component
+  // * potentially need to include it so we can handle applying operations and updating the bitmaps
+
   state_ = kBootstrapping;
   return Status::OK();
 }
@@ -294,7 +306,7 @@ Status Tablet::DecodeWriteOperations(const Schema* client_schema,
 
   DCHECK_EQ(tx_state->row_ops().size(), 0);
 
-  // Acquire the schema lock in shared mode, so that the schema doesn't
+  // Acquire the schema lock in shaired mode, so that the schema doesn't
   // change while this transaction is in-flight.
   tx_state->AcquireSchemaLock(&schema_lock_);
 
@@ -413,12 +425,17 @@ Status Tablet::InsertOrUpsertUnlocked(WriteTransactionState *tx_state,
 
   // TODO: the Insert() call below will re-encode the key, which is a
   // waste. Should pass through the KeyProbe structure perhaps.
+  // @andrwng LOOK AT THIS FOR ENCODING/DECODING
+  //          this should affect how we one-hot encode
 
   // Now try to op into memrowset. The memrowset itself will return
   // AlreadyPresent if it has already been oped there.
   Status s = comps->memrowset->Insert(ts, row, tx_state->op_id());
   if (s.ok()) {
     op->SetInsertSucceeded(comps->memrowset->mrs_id());
+    // @andrwng
+    // bitmapping not necessary, since the memrowset is all in memory anyway
+    // could still improve performance, but maybe not by as much, depending on how often the compaction happens
   } else {
     if (s.IsAlreadyPresent()) {
       if (is_upsert) {
@@ -626,6 +643,17 @@ void Tablet::ApplyRowOperation(WriteTransactionState* tx_state,
     default:
       LOG_WITH_PREFIX(FATAL) << RowOperationsPB::Type_Name(row_op->decoded_op.type);
   }
+
+  // @andrwng: When you do ApplyRowOperation, does this add to the RowSetTree?
+  //         : If so, it should also add to the RowSetBitmap
+  // Hunch is that we shouldn't add it just yet, rather, this would work with the
+  // DeltaTracker, since new inserts are stored as DMSs and are flushed later 
+}
+
+void Tablet::ModifyRowSetBitmap(const RowSetBitmap& old_bitmap,
+                                const RowSetVector& rowsets_to_remove,
+                                const RowSetVector& rowsets_to_add,
+                                RowSetBitmap* new_bitmap) {
 }
 
 void Tablet::ModifyRowSetTree(const RowSetTree& old_tree,
@@ -1521,6 +1549,14 @@ Status Tablet::CaptureConsistentIterators(
   RETURN_NOT_OK(components_->memrowset->NewRowIterator(projection, snap, &ms_iter));
   ret.push_back(shared_ptr<RowwiseIterator>(ms_iter.release()));
 
+  // @andrwng: For the non-key queries, rather than searching the BTree for a key-range query, we should instead
+  // search the bitmap for those and pushback the rowwiseiterators (block) based on the bitmap
+
+  // TODO andrwng: want to make this not the case
+  //    * If we can see that it is an open-ended range, but we we can use the 
+  //      bitmap to avoid some rowsets, we should avoid those rowsets
+
+
   // Cull row-sets in the case of key-range queries.
   if (spec != nullptr && spec->lower_bound_key() && spec->exclusive_upper_bound_key()) {
     // TODO : support open-ended intervals
@@ -1528,6 +1564,11 @@ Status Tablet::CaptureConsistentIterators(
     // an inclusive interval. So, we might end up fetching one more rowset than
     // necessary.
     vector<RowSet *> interval_sets;
+    // Returns the rowsets that are relevant to the query. Should do something similar with bitmaps,
+    // or even add on to RowSetTree::FindRowSetIntersectingInterval
+    //
+    // One possibility would be to merge RowSetTree and RowSetBitmap
+    // RowSetBitmap gives a top-level overview
     components_->rowsets->FindRowSetsIntersectingInterval(
         spec->lower_bound_key()->encoded_key(),
         spec->exclusive_upper_bound_key()->encoded_key(),
@@ -1847,6 +1888,7 @@ Status Tablet::Iterator::Init(ScanSpec *spec) {
 
   vector<shared_ptr<RowwiseIterator>> iters;
 
+  // @andrwng change CaptureConsistentIterators to use bitmap if possible
   RETURN_NOT_OK(tablet_->CaptureConsistentIterators(&projection_, snap_, spec, &iters));
 
   switch (order_) {
@@ -1868,6 +1910,8 @@ bool Tablet::Iterator::HasNext() const {
   return iter_->HasNext();
 }
 
+// @andrwng: On a call to NextBlock, we've already done our pruning for picking the right tablet
+// and our pruning of blocks based on the range-partitions (although these are technically separate partitions)
 Status Tablet::Iterator::NextBlock(RowBlock *dst) {
   DCHECK(iter_.get() != nullptr) << "Not initialized!";
   return iter_->NextBlock(dst);

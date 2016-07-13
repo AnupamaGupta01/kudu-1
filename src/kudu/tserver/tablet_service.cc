@@ -1026,15 +1026,23 @@ void TabletServiceImpl::Scan(const ScanRequestPB* req,
 
   bool has_more_results = false;
   TabletServerErrorPB::Code error_code;
+
   if (req->has_new_scan_request()) {
+    // If there is a new scan request
+
     const NewScanRequestPB& scan_pb = req->new_scan_request();
     scoped_refptr<TabletPeer> tablet_peer;
+
+    // Lookup the given tablet, ensuring that it both exists and is RUNNING.
+    // tablet specified by the scan_pb
     if (!LookupTabletPeerOrRespond(server_->tablet_manager(), scan_pb.tablet_id(), resp, context,
                                    &tablet_peer)) {
       return;
     }
     string scanner_id;
     Timestamp scan_timestamp;
+
+    // collector: ScanResultCopier
     Status s = HandleNewScanRequest(tablet_peer.get(), req, context,
                                     &collector, &scanner_id, &scan_timestamp, &has_more_results,
                                     &error_code);
@@ -1051,6 +1059,8 @@ void TabletServiceImpl::Scan(const ScanRequestPB* req,
       resp->set_snap_timestamp(scan_timestamp.ToUint64());
     }
   } else if (req->has_scanner_id()) {
+    // If there is an existing scanner in the request
+
     Status s = HandleContinueScanRequest(req, &collector, &has_more_results, &error_code);
     if (PREDICT_FALSE(!s.ok())) {
       SetupErrorAndRespond(resp->mutable_error(), s, error_code, context);
@@ -1361,12 +1371,15 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
   DCHECK(result_collector != nullptr);
   DCHECK(error_code != nullptr);
   DCHECK(req->has_new_scan_request());
+
+  // Generate a new scan request
   const NewScanRequestPB& scan_pb = req->new_scan_request();
   TRACE_EVENT1("tserver", "TabletServiceImpl::HandleNewScanRequest",
                "tablet_id", scan_pb.tablet_id());
 
   const Schema& tablet_schema = tablet_peer->tablet_metadata()->schema();
 
+  // Register the new scanner with the scanner manager
   SharedScanner scanner;
   server_->scanner_manager()->NewScanner(tablet_peer,
                                          rpc_context->requestor_string(),
@@ -1374,17 +1387,21 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
 
   // If we early-exit out of this function, automatically unregister
   // the scanner.
+  // Everything is handled in the implementation of ScopedUnregisterScanner
   ScopedUnregisterScanner unreg_scanner(server_->scanner_manager(), scanner->id());
 
   // Create the user's requested projection.
   // TODO: add test cases for bad projections including 0 columns
   Schema projection;
+
+  // Convert the projection schema from the new requests's schema into Schema object
   Status s = ColumnPBsToSchema(scan_pb.projected_columns(), &projection);
   if (PREDICT_FALSE(!s.ok())) {
     *error_code = TabletServerErrorPB::INVALID_SCHEMA;
     return s;
   }
 
+  // The SchemaBuilder shouldn't have column ids in it already
   if (projection.has_column_ids()) {
     *error_code = TabletServerErrorPB::INVALID_SCHEMA;
     return Status::InvalidArgument("User requests should not have Column IDs");
@@ -1404,6 +1421,8 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
   // Missing columns will contain the columns that are not mentioned in the client
   // projection but are actually needed for the scan, such as columns referred to by
   // predicates or key columns (if this is an ORDERED scan).
+  //   Key point: such as columns referred to by predicates or key columns
+  //   prune the columns
   vector<ColumnSchema> missing_cols;
   s = SetupScanSpec(scan_pb, tablet_schema, projection, &missing_cols, &spec, scanner);
   if (PREDICT_FALSE(!s.ok())) {
@@ -1435,18 +1454,20 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
   for (const ColumnSchema& col : projection_columns) {
     CHECK_OK(projection_builder.AddColumn(col, tablet_schema.is_key_column(col.name())));
   }
-  projection = projection_builder.BuildWithoutIds();
+  projection = projection_builder.BuildWithoutIds();  
 
   gscoped_ptr<RowwiseIterator> iter;
   // Preset the error code for when creating the iterator on the tablet fails
   TabletServerErrorPB::Code tmp_error_code = TabletServerErrorPB::MISMATCHED_SCHEMA;
 
   shared_ptr<Tablet> tablet;
+  // tablet_peer is an input
+  // Create an iterator iter depending on the type of read_mode
   RETURN_NOT_OK(GetTabletRef(tablet_peer, &tablet, error_code));
   {
     TRACE("Creating iterator");
     TRACE_EVENT0("tserver", "Create iterator");
-
+    tablet->NewBitmapIterators(project, )
     switch (scan_pb.read_mode()) {
       case UNKNOWN_READ_MODE: {
         *error_code = TabletServerErrorPB::INVALID_SCAN_SPEC;
@@ -1454,6 +1475,11 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
         return s;
       }
       case READ_LATEST: {
+        // this is where we create a concrete iterator with definition of NextBlock()
+        // iterator is defined with the projection as its schema
+        //
+        // The iterator points to and iterates over the tablet's data, materializing
+        // along the way
         s = tablet->NewRowIterator(projection, &iter);
         break;
       }
@@ -1486,6 +1512,7 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
     return s;
   }
 
+  // if it's an empty iterator, we're done
   *has_more_results = iter->HasNext();
   TRACE("has_more: $0", *has_more_results);
   if (!*has_more_results) {
@@ -1494,12 +1521,18 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
     return Status::OK();
   }
 
+  // @andrwng: this iterator points to the tablets of interest
+  // If a bitmap scanner is available, we should add it (consult the ScanSpec)
   scanner->Init(std::move(iter), std::move(spec));
   unreg_scanner.Cancel();
+
+  // scanner_id refers to a specific scanner
   *scanner_id = scanner->id();
 
   VLOG(1) << "Started scanner " << scanner->id() << ": " << scanner->iter()->ToString();
 
+  // start scanning. HandleContinueScanRequest has the same behavior that we want
+  // this was just setting up the scanner
   size_t batch_size_bytes = GetMaxBatchSizeBytesHint(req);
   if (batch_size_bytes > 0) {
     TRACE("Continuing scan request");
@@ -1531,7 +1564,10 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
   // TODO: need some kind of concurrency control on these scanner objects
   // in case multiple RPCs hit the same scanner at the same time. Probably
   // just a trylock and fail the RPC if it contends.
+  
+  // get the proper scanner (close it if that's what the request is)
   SharedScanner scanner;
+  // gets the proper scanner from the ScanRequestPB, after it's been set in HandleNewScanRequest
   if (!server_->scanner_manager()->LookupScanner(req->scanner_id(), &scanner)) {
     if (batch_size_bytes == 0 && req->close_scanner()) {
       // A request to close a non-existent scanner.
@@ -1561,6 +1597,7 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
   scanner->IncrementCallSeqId();
   scanner->UpdateAccessTime();
 
+  // TODO @andrwng: make sure scanner has been pruned beforehand
   RowwiseIterator* iter = scanner->iter();
 
   // TODO: could size the RowBlock based on the user's requested batch size?
@@ -1577,6 +1614,8 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
   deadline.AddDelta(MonoDelta::FromMilliseconds(budget_ms));
 
   int64_t rows_scanned = 0;
+
+  // TODO @andrwng before this, make sure that iter only applies to cfiles of interest, even for the non-key predicates
   while (iter->HasNext()) {
     if (PREDICT_FALSE(FLAGS_scanner_inject_latency_on_each_batch_ms > 0)) {
       SleepFor(MonoDelta::FromMilliseconds(FLAGS_scanner_inject_latency_on_each_batch_ms));
@@ -1651,6 +1690,8 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
 
   scanner->UpdateAccessTime();
   *has_more_results = !req->close_scanner() && iter->HasNext();
+
+  // if the iterator has more, then ensure that the scanner doesn't get deleted after leaving scope
   if (*has_more_results) {
     unreg_scanner.Cancel();
   } else {
