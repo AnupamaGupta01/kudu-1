@@ -104,13 +104,15 @@ Status DiskRowSetWriter::Open() {
 }
 
 // @andrwng
+// This could be a SecondaryIndexWriter
 Status DiskRowSetWriter::InitBitmapWriter() {
   gscoped_ptr<WriteableBlock> block;
   FsManager* fs = rowset_metadata_->fs_manager();
   RETURN_NOT_OK_PREPEND(fs->CreateNewBlock(&block),
                         "Couldn't allocate a block for bitmap index");
-  rowset_metadata_->set_bitmap_index_block(block->id());
+  rowset_metadata_->set_bitmap_block(block->id());
 
+  bitmap_writer_.reset()
   /*
    for (ColumnSchema& col: schema_) {
       if (col->is_bitmapped()) {
@@ -123,7 +125,33 @@ Status DiskRowSetWriter::InitBitmapWriter() {
                                                // GetTypeInfo(BINARY)
                                                // false,
                                                // std::move(block)))
-  return 
+  
+  return Status::OK();
+}
+
+Status DiskRowSetWriter::InitSecondaryIndexWriters() {
+  for (ColumnSchema& col: schema_) {
+    if (col->has_secondary_index()) {
+      // call the appropriate SecondaryIndexFileWriter
+      // SecondaryIndexFileWriter* s;
+      // secondary_index_writers.push_back(s)
+      // create GoodHashMap (col_name:String => sidx_:SecondaryIndexWriter*)
+      TRACE_EVENT0("tablet", "DiskRowSetWriter::InitSecondaryIndexWriters");
+      gscoped_ptr<WritableBlock> block;
+      FsManager* fs = rowset_metadata_->fs_manager();
+      RETURN_NOT_OK_PREPEND(fs->CreateNewBlock(&block),
+                            "Couldn't allocate a block for secondary index");
+      // TODO something like
+      // rowset_metadata_->push_secondary_index_block(block->id());
+      gscoped_ptr<SecondaryIndexWriter> sidx;
+      // TODO @andrwng: reset sidx to the proper SecondaryIndexWriter
+      // for example if(BITMAP)=>BitmapFileWriter
+      sidx->reset();
+
+      secondary_index_writers_.push_back(sidx);
+    }
+  }
+  return Status::OK();
 }
 
 Status DiskRowSetWriter::InitBloomFileWriter() {
@@ -510,6 +538,8 @@ DiskRowSet::DiskRowSet(shared_ptr<RowSetMetadata> rowset_metadata,
 
 Status DiskRowSet::Open() {
   TRACE_EVENT0("tablet", "DiskRowSet::Open");
+  // @andrwng give the SecondaryIndexWriters to the CFileSet as well
+  // Should already be in rowset_metadata_
   gscoped_ptr<CFileSet> new_base(new CFileSet(rowset_metadata_));
   RETURN_NOT_OK(new_base->Open());
   base_data_.reset(new_base.release());
@@ -597,6 +627,20 @@ Status DiskRowSet::NewMajorDeltaCompaction(const vector<ColumnId>& col_ids,
                                       std::move(delta_iter),
                                       included_stores,
                                       col_ids));
+  return Status::OK();
+}
+
+Status DiskRowSet::NewBitmapIterator(const Schema *projection,
+                                  const MvccSnapshot &mvcc_snap,
+                                  gscoped_ptr<RowwiseIterator>* out) const {
+  DCHECK(open_);
+  boost::shared_lock<rw_spinlock> lock(component_lock_.get_lock());
+
+  shared_ptr<CFileSet::Iterator> base_iter(base_data_->NewIterator(projection));
+  gscoped_ptr<ColumnwiseIterator> col_iter;
+  RETURN_NOT_OK(delta_tracker_->WrapIterator(base_iter, mvcc_snap, &col_iter));
+  out->reset(new MaterializingIterator(
+      shared_ptr<ColumnwiseIterator>(col_iter.release())));
   return Status::OK();
 }
 

@@ -89,6 +89,20 @@ class RowSetMetadata {
     return tablet_metadata_->schema();
   }
 
+  void set_secondary_index_blocks(const std::vector<BlockId>& block_ids) {
+    for (auto block_id : block_ids) {
+      // Not sure if this is necessary
+      // std::lock_guard<LockType> l(lock_);
+      secondary_index_blocks_.push_back(block_id);
+    }
+  }
+
+  void set_bitmap_block(const BlockId& block_id) {
+    std::lock_guard<LockType> l(lock_);
+    DCHECK(bitmap_block_.IsNull());
+    bitmap_block_ = block_id;
+  }
+
   void set_bloom_block(const BlockId& block_id) {
     std::lock_guard<LockType> l(lock_);
     DCHECK(bloom_block_.IsNull());
@@ -107,6 +121,16 @@ class RowSetMetadata {
 
   Status CommitUndoDeltaDataBlock(const BlockId& block_id);
 
+  std::vector<BlockId> secondary_index_blocks() const {
+    return secondary_index_blocks_;
+  }
+
+  BlockId bitmap_block() const {
+    // @andrwng what is the point of this?
+    std::lock_guard<LockType> l(lock_);
+    return bitmap_block_;
+  }
+
   BlockId bloom_block() const {
     std::lock_guard<LockType> l(lock_);
     return bloom_block_;
@@ -120,6 +144,11 @@ class RowSetMetadata {
   bool has_adhoc_index_block() const {
     std::lock_guard<LockType> l(lock_);
     return !adhoc_index_block_.IsNull();
+  }
+
+  bool has_secondary_index_blocks() const {
+    std::lock_guard<LockType> l(lock_);
+    return !secondary_index_blocks_.empty();
   }
 
   BlockId column_data_block_for_col_id(ColumnId col_id) {
@@ -208,6 +237,7 @@ class RowSetMetadata {
 
   BlockId bloom_block_;
   BlockId adhoc_index_block_;
+  BlockId bitmap_block_;
 
   // Map of column ID to block ID.
   ColumnIdToBlockIdMap blocks_by_col_id_;

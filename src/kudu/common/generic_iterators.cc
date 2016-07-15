@@ -515,7 +515,7 @@ Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
     RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
 
     // Evaluate the column predicate.
-    get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
+    get<1>(col_pred).Evaluate(dst_col, column_bitmap, dst->selection_vector());
 
     // If after evaluating this predicate the entire row block has been filtered
     // out, we don't need to materialize other columns at all.

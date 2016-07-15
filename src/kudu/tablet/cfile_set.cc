@@ -96,13 +96,41 @@ Status CFileSet::Open() {
     RETURN_NOT_OK(key_index_reader()->Init());
   }
 
+  if (rowset_metadata_->has_seconary_index_blocks()) {
+    RETURN_NOT_OK(OpenSecondaryIndexReaders());
+  }
+
   // Determine the upper and lower key bounds for this CFileSet.
   RETURN_NOT_OK(LoadMinMaxKeys());
 
   return Status::OK();
 }
 
+// @andrwng TODO
+Status CFileSet::OpenSecondaryIndexReaders() {
+  // Try to open all of the secondary index readers
+  if (!secondary_index_readers_.empty()) {
+    return Status::OK();
+  }
+
+  FsManager* fs = rowset_metadata_->fs_manager();
+  gscoped_ptr<ReadableBlock> block;
+
+  for (auto sidx_block : rowset_metadata_->secondary_index_blocks()) {
+    // TODO I'm not sure if gscoped_ptrs actually work like this
+    gscoped_ptr<SecondaryIndexReader> reader;
+    RETURN_NOT_OK(fs->OpenBlock(sidx_block), &block);
+    ReaderOpts opts;
+    CFileReader::Open(std::move(block), opts, &reader)
+
+    // Will std::move allow reader to last past the scope of this function?
+    secondary_index_readers_.push_back(std::move(reader));
+  }
+  return Status::OK();
+}
+
 Status CFileSet::OpenAdHocIndexReader() {
+  // basically opening all of the indexes at the get-go? maybe not the best idea
   if (ad_hoc_idx_reader_ != nullptr) {
     return Status::OK();
   }
@@ -321,7 +349,10 @@ Status CFileSet::Iterator::Init(ScanSpec *spec) {
   return Status::OK();
 }
 
+// We're given a scan query, master has ordered a scan on the tablet via a ScanSpec
+// Columns have already been specified
 Status CFileSet::Iterator::PushdownRangeScanPredicate(ScanSpec *spec) {
+  // occurs within a single tablet
   CHECK_GT(row_count_, 0);
 
   lower_bound_idx_ = 0;
@@ -340,6 +371,8 @@ Status CFileSet::Iterator::PushdownRangeScanPredicate(ScanSpec *spec) {
   if (spec->lower_bound_key() &&
       spec->lower_bound_key()->encoded_key().compare(base_data_->min_encoded_key_) > 0) {
     bool exact;
+
+    // find the location of the lower bound given the key
     Status s = key_iter_->SeekAtOrAfter(*spec->lower_bound_key(), &exact);
     if (s.IsNotFound()) {
       // The lower bound is after the end of the key range.
@@ -350,6 +383,7 @@ Status CFileSet::Iterator::PushdownRangeScanPredicate(ScanSpec *spec) {
     }
     RETURN_NOT_OK(s);
 
+    // if we've already passed the lower bound, ignore it
     lower_bound_idx_ = std::max(lower_bound_idx_, key_iter_->GetCurrentOrdinal());
     VLOG(1) << "Pushed lower bound value "
             << spec->lower_bound_key()->Stringify(key_schema_for_vlog)

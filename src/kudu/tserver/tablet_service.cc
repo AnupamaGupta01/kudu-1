@@ -1479,7 +1479,8 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
         // iterator is defined with the projection as its schema
         //
         // The iterator points to and iterates over the tablet's data, materializing
-        // along the way
+        // along the way. Note in the Iterator::Init, there is a call to CaptureConsistentIterators
+        // that gets rid of the lower and upper bounds
         s = tablet->NewRowIterator(projection, &iter);
         break;
       }
@@ -1522,6 +1523,7 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
   }
 
   // @andrwng: this iterator points to the tablets of interest
+  // @ what is this iter
   // If a bitmap scanner is available, we should add it (consult the ScanSpec)
   scanner->Init(std::move(iter), std::move(spec));
   unreg_scanner.Cancel();
@@ -1567,6 +1569,7 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
   
   // get the proper scanner (close it if that's what the request is)
   SharedScanner scanner;
+  // @andrwng the ScanRequestPB specifies, I think this gets created in HandleNewScan
   // gets the proper scanner from the ScanRequestPB, after it's been set in HandleNewScanRequest
   if (!server_->scanner_manager()->LookupScanner(req->scanner_id(), &scanner)) {
     if (batch_size_bytes == 0 && req->close_scanner()) {
@@ -1598,6 +1601,9 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
   scanner->UpdateAccessTime();
 
   // TODO @andrwng: make sure scanner has been pruned beforehand
+  // By that, I mean, use the secondary (bitmap) index to remove rowsets that do not satisfy the predicate
+  //   This behavior would be considered tablet-level indexing
+  //   SecondaryIndexIterator should consider its secondary index in its calls to HasNext and NextBlock
   RowwiseIterator* iter = scanner->iter();
 
   // TODO: could size the RowBlock based on the user's requested batch size?
@@ -1616,11 +1622,14 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
   int64_t rows_scanned = 0;
 
   // TODO @andrwng before this, make sure that iter only applies to cfiles of interest, even for the non-key predicates
+  // iter scans through the MSBTree or the DiskRowSetBlock
   while (iter->HasNext()) {
     if (PREDICT_FALSE(FLAGS_scanner_inject_latency_on_each_batch_ms > 0)) {
       SleepFor(MonoDelta::FromMilliseconds(FLAGS_scanner_inject_latency_on_each_batch_ms));
     }
 
+    // TODO @andrwng: look at the block's bitmap
+    // If it is a DiskRowSet::Iterator, this will lead to a call to MaterializeBlock-->Evalute-->ApplyPredicate
     Status s = iter->NextBlock(&block);
     if (PREDICT_FALSE(!s.ok())) {
       LOG(WARNING) << "Copying rows from internal iterator for request " << req->ShortDebugString();

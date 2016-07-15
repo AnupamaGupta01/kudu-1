@@ -224,6 +224,9 @@ namespace {
 template <typename P>
 void ApplyPredicate(const ColumnBlock& block, SelectionVector* sel, P p) {
   if (block.is_nullable()) {
+    // gets the value at row i in the block
+    // checks if it's predicated using P (predicate?) and clears it if it is not the case
+    // by the end, the SelectionVector should have 1s corresponding to only rows
     for (size_t i = 0; i < block.nrows(); i++) {
       if (!sel->IsRowSelected(i)) continue;
       const void *cell = block.nullable_cell_ptr(i);
@@ -243,7 +246,8 @@ void ApplyPredicate(const ColumnBlock& block, SelectionVector* sel, P p) {
 }
 } // anonymous namespace
 
-void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) const {
+// @andrwng TODO: extend ColumnBitmaps to something like SecondaryIndex
+void ColumnPredicate::Evaluate(const ColumnBlock& block, const SelectionVector& column_bitmap, SelectionVector *sel) const {
   CHECK_NOTNULL(sel);
 
   // The type-specific predicate is provided as a function template to
@@ -281,11 +285,21 @@ void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) c
       }
       return;
     };
+    // @andrwng: have something like this that takes in a bitmap and set the
+    // selection vector that way
     case PredicateType::Equality: {
+      if (column_.is_bitmapped()) {
+        // check the bitmap for the index of this->lower_
+        // copy the bitmap column to the SelectionVector
+        // int col_idx = bitmaps.getColumn(column_.name())
+        sel->CopyFromBitmap(column_bitmap);
+      }
+      else {
         ApplyPredicate(block, sel, [this] (const void* cell) {
             return column_.type_info()->Compare(cell, this->lower_) == 0;
         });
-        return;
+      }
+      return;
     };
     case PredicateType::IsNotNull: {
       if (!block.is_nullable()) return;

@@ -1549,13 +1549,14 @@ Status Tablet::CaptureConsistentIterators(
   RETURN_NOT_OK(components_->memrowset->NewRowIterator(projection, snap, &ms_iter));
   ret.push_back(shared_ptr<RowwiseIterator>(ms_iter.release()));
 
-  // @andrwng: For the non-key queries, rather than searching the BTree for a key-range query, we should instead
+  // @andrwng: For the non-key queries, rather than searching the for a primary query, we should instead
   // search the bitmap for those and pushback the rowwiseiterators (block) based on the bitmap
 
   // TODO andrwng: want to make this not the case
   //    * If we can see that it is an open-ended range, but we we can use the 
   //      bitmap to avoid some rowsets, we should avoid those rowsets
-
+  //    * May have to change the implementation of FindRowSetsIntersectingInterval
+  //    * This is where the RowSetTree comes into play, 
 
   // Cull row-sets in the case of key-range queries.
   if (spec != nullptr && spec->lower_bound_key() && spec->exclusive_upper_bound_key()) {
@@ -1569,6 +1570,11 @@ Status Tablet::CaptureConsistentIterators(
     //
     // One possibility would be to merge RowSetTree and RowSetBitmap
     // RowSetBitmap gives a top-level overview
+
+    // @andrwng
+    // scan->predicates() : std::unordered_map<std::string, ColumnPredicate> // string: column_name: column().name()
+    // predicate->column() : ColumnSchema
+
     components_->rowsets->FindRowSetsIntersectingInterval(
         spec->lower_bound_key()->encoded_key(),
         spec->exclusive_upper_bound_key()->encoded_key(),

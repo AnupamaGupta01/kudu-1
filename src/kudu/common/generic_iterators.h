@@ -132,6 +132,46 @@ class UnionIterator : public RowwiseIterator {
   ObjectPool<ScanSpec> scan_spec_copies_;
 };
 
+// An iterator that passes along a bitmap
+class ColumnBitmapIterator : public RowwiseIterator {
+ public:
+  explicit ColumnBitmapIterator(std::shared_ptr<ColumnwiseIterator> iter);
+
+  // Initialize the iterator, performing predicate pushdown as described above.
+  Status Init(ScanSpec *spec) OVERRIDE;
+
+  bool HasNext() const OVERRIDE;
+
+  string ToString() const OVERRIDE;
+
+  const Schema &schema() const OVERRIDE {
+    return iter_->schema();
+  }
+
+  virtual void GetIteratorStats(std::vector<IteratorStats>* stats) const OVERRIDE {
+    iter_->GetIteratorStats(stats);
+  }
+
+  virtual Status NextBlock(RowBlock* dst) OVERRIDE;
+
+ private:
+  FRIEND_TEST(TestMaterializingIterator, TestPredicatePushdown);
+  FRIEND_TEST(TestPredicateEvaluatingIterator, TestPredicateEvaluation);
+
+  Status EvaluateNextBlock(RowBlock *dst);
+
+  std::shared_ptr<ColumnwiseIterator> iter_;
+
+  // List of (column index, predicate) in order of most to least selective.
+  std::vector<std::tuple<int32_t, ColumnPredicate>> col_idx_predicates_;
+
+  // List of column indexes without predicates to materialize.
+  std::vector<int32_t> non_predicate_column_indexes_;
+
+  // Set only by test code to disallow pushdown.
+  bool disallow_pushdown_for_tests_;
+};
+
 // An iterator which wraps a ColumnwiseIterator, materializing it into full rows.
 //
 // Column predicates are pushed down into this iterator. While materializing a

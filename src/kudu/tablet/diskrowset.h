@@ -109,8 +109,7 @@ class DiskRowSetWriter {
 
   Status InitBloomFileWriter();
 
-  // @andrwng
-  Status DiskRowSetWriter::InitBitmapWriter();
+  Status InitSecondaryIndexWriters();
 
   // Initializes the index writer required for compound keys
   // this index is written to a new file instead of embedded in the col_* files
@@ -131,9 +130,11 @@ class DiskRowSetWriter {
   gscoped_ptr<cfile::BloomFileWriter> bloom_writer_;
   gscoped_ptr<cfile::CFileWriter> ad_hoc_index_writer_;
 
+  // We should store the (column_name => SecondaryIndexWriter*)
+
   // @andrwng The writers each correspond to a single column's bitmap
   //  or should this be bitmap_vector_writer
-  std::vector<gscoped_ptr<cfile::BitmapFileWriter>> bitmap_writers_;
+  std::vector<gscoped_ptr<cfile::SecondaryIndexWriter>> secondary_index_writers_;
 
   // The last encoded key written.
   faststring last_encoded_key_;
