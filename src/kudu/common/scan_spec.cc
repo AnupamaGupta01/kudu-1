@@ -46,6 +46,18 @@ void ScanSpec::AddPredicate(ColumnPredicate pred) {
   }
 }
 
+std::map<string, ColumnPredicate> ScanSpec::GetIndexedPredicates(const Schema& schema) {
+  vector<string, ColumnPredicate> ret;
+  // std::unordered_map<std::string, ColumnPredicate> predicates_; (scan_spec.h)
+  for (auto pred: predicates_) {
+    for (ColumnSchema col: schema.columns()) {
+      if (col.is_indexed() && col.name().compare(pred->first)) {
+        ret.push_back
+      }
+    }
+  }
+}
+
 void ScanSpec::RemovePredicate(const string& column_name) {
   predicates_.erase(column_name);
 }
@@ -57,7 +69,7 @@ void ScanSpec::RemovePredicates() {
 bool ScanSpec::CanShortCircuit() const {
   if (lower_bound_key_ &&
       exclusive_upper_bound_key_ &&
-      lower_bound_key_->encoded_key().compare(exclusive_upper_bound_key_->encoded_key()) >= 0) {
+      lower_bound_key_->encod_edkey().compare(exclusive_upper_bound_key_->encoded_key()) >= 0) {
     return false;
   }
 
@@ -121,7 +133,15 @@ void ScanSpec::OptimizeScan(const Schema& schema,
   // rely on lower_bound_key_ < exclusive_upper_bound_key_ and no None
   // predicates in the optimization step.
   if (!CanShortCircuit()) {
+    // Optimizations on the query (scan) itself
+    // (500, 500), (500, 750)
+    // user_id = 500, target_id >= 500, target_id < 750
     LiftPrimaryKeyBounds(schema, arena);
+    // WHERE user_id = 500
+    // AND target_id < 700;
+    //
+    // primary_key >= (500, min)
+    // primary_key  < (500, 700)
     PushPredicatesIntoPrimaryKeyBounds(schema, arena, pool, remove_pushed_predicates);
   }
 }

@@ -121,12 +121,13 @@ class ColumnSchema {
   //   Slice default_str("Hello");
   //   ColumnSchema col_d("d", STRING, false, &default_str);
   ColumnSchema(string name, DataType type, bool is_nullable = false,
-               bool is_bitmapped = false,
+               IndexType index_type = NO_IDX,
                const void* read_default = NULL,
                const void* write_default = NULL,
                ColumnStorageAttributes attributes = ColumnStorageAttributes())
       : name_(std::move(name)),
         type_info_(GetTypeInfo(type)),
+        index_type_(index_type),
         is_nullable_(is_nullable),
         is_bitmapped_(is_bitmapped),
         read_default_(read_default ? new Variant(type, read_default) : NULL),
@@ -143,9 +144,17 @@ class ColumnSchema {
     return type_info_;
   }
 
-  // @andrwng
-  bool is_bitmapped() const {
-    return is_bitmapped_;
+  // // @andrwng
+  // bool is_bitmapped() const {
+  //   return is_bitmapped_;
+  // }
+
+  bool is_indexed() const {
+    return index_type == NO_IDX;
+  }
+
+  const IndexType index_type() const {
+    return index_type_;
   }
 
   bool is_nullable() const {

@@ -111,6 +111,11 @@ class KUDU_EXPORT KuduColumnSchema {
     TIMESTAMP = 9
   };
 
+  enum IndexType {
+    NO_IDX = 0,
+    BITMAP_IDX = 1
+  };
+
   static std::string DataTypeToString(DataType type);
 
   // DEPRECATED: use KuduSchemaBuilder instead.

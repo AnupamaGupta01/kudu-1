@@ -175,7 +175,7 @@ class BloomFilter {
   bool MayContainKey(const BloomKeyProbe &probe) const;
 
  private:
-  friend class BloomFilterBuilder;
+  friend class BloomFilterBuilder;  // BloomFilterBuilder can access BloomFilter's private members ;)
   static uint32_t PickBit(uint32_t hash, size_t n_bits);
 
   size_t n_bits_;

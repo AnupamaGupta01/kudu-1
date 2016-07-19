@@ -316,6 +316,8 @@ Status KuduScanner::Data::OpenTablet(const string& partition_key,
                                   SCHEMA_PB_WITHOUT_STORAGE_ATTRIBUTES | SCHEMA_PB_WITHOUT_IDS));
 
   for (int attempt = 1;; attempt++) {
+    // Connect to the tablet if possible
+
     Synchronizer sync;
     table_->client()->data_->meta_cache_->LookupTabletByKeyOrNext(table_.get(),
                                                                   partition_key,
@@ -334,6 +336,8 @@ Status KuduScanner::Data::OpenTablet(const string& partition_key,
     // Check if the meta cache returned a tablet covering a partition key range past
     // what we asked for. This can happen if the requested partition key falls
     // in a non-covered range. In this case we can potentially prune the tablet.
+
+    // If we're trying to open a tablet that isn't part of the range, prune it!
     if (partition_key < remote_->partition().partition_key_start() &&
         partition_pruner_.ShouldPrune(remote_->partition())) {
       partition_pruner_.RemovePartitionKeyRange(remote_->partition().partition_key_end());

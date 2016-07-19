@@ -80,6 +80,8 @@ class BlockBuilder {
   // If no keys have been added, returns Status::NotFound
   virtual Status GetFirstKey(void *key) const = 0;
 
+  virtual Status Evaluate(ColumnPredicate col_pred, SelectionVector* sel, bool& eval_complete) = 0;
+
   virtual ~BlockBuilder() {}
  private:
   DISALLOW_COPY_AND_ASSIGN(BlockBuilder);

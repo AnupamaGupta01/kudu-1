@@ -1467,7 +1467,6 @@ Status TabletServiceImpl::HandleNewScanRequest(TabletPeer* tablet_peer,
   {
     TRACE("Creating iterator");
     TRACE_EVENT0("tserver", "Create iterator");
-    tablet->NewBitmapIterators(project, )
     switch (scan_pb.read_mode()) {
       case UNKNOWN_READ_MODE: {
         *error_code = TabletServerErrorPB::INVALID_SCAN_SPEC;
@@ -1630,7 +1629,10 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
 
     // TODO @andrwng: look at the block's bitmap
     // If it is a DiskRowSet::Iterator, this will lead to a call to MaterializeBlock-->Evalute-->ApplyPredicate
+    Status s = iter->EvalNextBlock(req, &block);
     Status s = iter->NextBlock(&block);
+
+    
     if (PREDICT_FALSE(!s.ok())) {
       LOG(WARNING) << "Copying rows from internal iterator for request " << req->ShortDebugString();
       *error_code = TabletServerErrorPB::UNKNOWN_ERROR;

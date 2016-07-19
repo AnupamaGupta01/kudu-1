@@ -132,10 +132,11 @@ class UnionIterator : public RowwiseIterator {
   ObjectPool<ScanSpec> scan_spec_copies_;
 };
 
+
 // An iterator that passes along a bitmap
-class ColumnBitmapIterator : public RowwiseIterator {
+class SecondaryIndexIterator : public RowwiseIterator {
  public:
-  explicit ColumnBitmapIterator(std::shared_ptr<ColumnwiseIterator> iter);
+  explicit SecondaryIndexIterator(std::shared_ptr<ColumnwiseIterator> iter);
 
   // Initialize the iterator, performing predicate pushdown as described above.
   Status Init(ScanSpec *spec) OVERRIDE;
@@ -157,6 +158,9 @@ class ColumnBitmapIterator : public RowwiseIterator {
  private:
   FRIEND_TEST(TestMaterializingIterator, TestPredicatePushdown);
   FRIEND_TEST(TestPredicateEvaluatingIterator, TestPredicateEvaluation);
+
+  // @andrwng List of secondary indexes
+  std::map<string, SecondaryIndex *> col_name_indexes_;
 
   Status EvaluateNextBlock(RowBlock *dst);
 

@@ -93,7 +93,7 @@ Status DiskRowSetWriter::Open() {
   // Check the ColumnSchema for where the column bitmaps would be generated
   // iterate through the Schema's std::vector<ColumnSchema> ->is_bitmapped()
   // InitColumnBitmaps for the given 
-  RETURN_NOT_OK(InitBitmapWriter());
+  RETURN_NOT_OK(InitSecondaryIndexWriters());
 
   if (schema_->num_key_columns() > 1) {
     // Open ad-hoc index writer
@@ -143,12 +143,17 @@ Status DiskRowSetWriter::InitSecondaryIndexWriters() {
                             "Couldn't allocate a block for secondary index");
       // TODO something like
       // rowset_metadata_->push_secondary_index_block(block->id());
-      gscoped_ptr<SecondaryIndexWriter> sidx;
+      gscoped_ptr<SecondaryIndexWriter> index_writer;
+      DataType type = col->type_info()->type();
+
+      // use something like col -> secondary_index_type
       // TODO @andrwng: reset sidx to the proper SecondaryIndexWriter
       // for example if(BITMAP)=>BitmapFileWriter
-      sidx->reset();
+      index_writer->reset(new cfile::BitmapFileWriter<type>(std::move(block)));
 
-      secondary_index_writers_.push_back(sidx);
+      // change to map(col->column_name() => index_writer)
+      secondary_index_writers_.push_back(index_writer);
+      RETURN_NOT_OK(index_writer->Start());
     }
   }
   return Status::OK();
@@ -247,6 +252,29 @@ Status DiskRowSetWriter::AppendBlock(const RowBlock &block) {
 #endif
   }
 
+
+  // Get the indexed columns and add them to their proper secondary indexes
+  // I think I'm doing this in the wrong spot; here, I might only want to write
+  // the bitmapfile to disk, rather than writing the data to the bitmap
+  for (size_t i = 0; i < schema_->num_columns(); i++) {
+    // iterate through the columns and add the ones that have indexes
+    ColumnSchema col = schema_->columns().get(i);
+    if (col.index_type() == NO_IDX) {
+      continue;
+    }
+    else if (col.index_type() == BITMAP_IDX) {
+      ColumnBlock cblock = block.column_block(i);
+      secondary_index_writers_[schema_columns().get(i)]->AddValues(cblock.data());
+      // HOW DO WE GET THE VALUES FROM HERE?
+      // Could .compare them against the DataTypes in the secondary index
+      // TODO: instead of comparing them, create a map and check for equality
+    }
+    else {
+      // Index type not supported!
+      return Status::OK(); // not actually ok, but change this later
+    }
+  }
+
   written_count_ += block.nrows();
 
   return Status::OK();
@@ -301,6 +329,17 @@ Status DiskRowSetWriter::FinishAndReleaseBlocks(ScopedWritableBlockCloser* close
   if (!s.ok()) {
     LOG(WARNING) << "Unable to Finish bloom filter writer: " << s.ToString();
     return s;
+  }
+
+  // TODO
+  // Finish all of the secondary column writers
+  for (/* writer_name in secondary_index_writers_.keys */) {
+
+    Status s = secondary_index_writers_[writer_name]->FinishAndReleaseBlock(closer);
+    if (!s.ok()) {
+      LOG(WARNING) << "Unable to Finish secondary index writer for " << writer_name << ":" << s.ToString();
+      return s;
+    }
   }
 
   finished_ = true;

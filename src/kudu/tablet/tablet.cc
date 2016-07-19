@@ -215,6 +215,8 @@ Status Tablet::Open() {
   // open the tablet row-sets
   for (const shared_ptr<RowSetMetadata>& rowset_meta : metadata_->rowsets()) {
     shared_ptr<DiskRowSet> rowset;
+
+    // Call to Open() now also initializes the secondary index writers
     Status s = DiskRowSet::Open(rowset_meta, log_anchor_registry_.get(), &rowset, mem_tracker_);
     if (!s.ok()) {
       LOG_WITH_PREFIX(ERROR) << "Failed to open rowset " << rowset_meta->ToString() << ": "
@@ -231,7 +233,15 @@ Status Tablet::Open() {
   shared_ptr<MemRowSet> new_mrs(new MemRowSet(next_mrs_id_++, *schema(),
                                               log_anchor_registry_.get(),
                                               mem_tracker_));
-  components_ = new TabletComponents(new_mrs, new_rowset_tree);
+
+  std::map<string, shared_ptr<SecondaryIndex> secondary_index_map;
+  // TODO: create new SecondaryIndexes based on the tablet schema
+  for (/* colum in schema */) {
+    // if the column has a secondary index
+    secondary_index_map[col->name()] = new BitmapIndex();
+  }
+
+  components_ = new TabletComponents(new_mrs, new_rowset_tree, secondary_index_map);
 
   // TODO: @andrwng
   // shared_ptr<RowSetBitmapVector> new_rowset_bimap_vector(new RowSetBitmapVector());
@@ -239,7 +249,7 @@ Status Tablet::Open() {
   // * I'm thinking that the bitmaps should be specific to the column
   //     Whereas the rowset_tree has a single primary key, we may need multiple bitmaps for the
   //     multiple columns, depending on what is specified by the user
-  shared_ptr<RowSetBitmap> new_rowset_bitmap(new RowSetBitmap());
+  // shared_ptr<RowSetBitmap> new_rowset_bitmap(new RowSetBitmap());
   CHECK_OK(new_rowset_tree->Reset(rowsets_opened));
   // TODO: decide whether the bitmap is needed as a part of the TabletComponents
   // * gut feeling is no, since it is not a crucial component
@@ -1557,6 +1567,13 @@ Status Tablet::CaptureConsistentIterators(
   //      bitmap to avoid some rowsets, we should avoid those rowsets
   //    * May have to change the implementation of FindRowSetsIntersectingInterval
   //    * This is where the RowSetTree comes into play, 
+  /*
+  if projection.has_secondary_indexes:
+    for col_idx in spec.columns():
+      if spec->predicates()[projection.schema]
+
+      push_back()
+  */
 
   // Cull row-sets in the case of key-range queries.
   if (spec != nullptr && spec->lower_bound_key() && spec->exclusive_upper_bound_key()) {
@@ -1590,10 +1607,28 @@ Status Tablet::CaptureConsistentIterators(
     return Status::OK();
   }
 
+  std::map<string, ColumnPredicate> indexed_preds = scan->GetIndexedPredicates(schema);
+  for (auto pred : indexed_preds) {
+
+  }
+
   // If there are no encoded predicates or they represent an open-ended range, then
   // fall back to grabbing all rowset iterators
   for (const shared_ptr<RowSet> &rs : components_->rowsets->all_rowsets()) {
     gscoped_ptr<RowwiseIterator> row_it;
+    // check the ScanSpec for what columns are being scanned
+    // if any of them have a column with a secondary index, create an IndexedIterator
+    std::vector<ColumnSchema>& cols = scan->predicates()->columns();
+    scan->GetIndexedPredicates(schema);
+    // this will return (column_name: string => ColumnPredicate)
+    // each of the row iterators will have access to the index readers
+    // the index readers are tablet-wide right now though
+    // i.e. there should be a SecondaryRowSetIndex that indexes what each rowset contains
+    //      there should also be a SecondaryBitmapIndex that indexes what each row contains
+    //    * the question is, how would these be related? the RowSetIndex would have a top-level view of what's in
+    //      each of its rowsets (potentially using RowSetIndex::ApplyPredicateTopLevel or something)
+    //    * would this dictate ownership of the BitmapIndexes by the RowSetIndex?
+
     RETURN_NOT_OK_PREPEND(rs->NewRowIterator(projection, snap, &row_it),
                           Substitute("Could not create iterator for rowset $0",
                                      rs->ToString()));

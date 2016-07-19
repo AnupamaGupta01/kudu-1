@@ -1048,6 +1048,7 @@ string KuduScanner::ToString() const {
 }
 
 Status KuduScanner::Open() {
+  // Final call to begin scanning
   CHECK(!data_->open_) << "Scanner already open";
 
   data_->mutable_configuration()->OptimizeScanSpec();

@@ -504,6 +504,23 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
   return Status::OK();
 }
 
+Status MaterializingIterator::EvalNextBlock(RowBlock* dst) {
+  size_t n = dst->row_capacity();
+  if (dst->arena()) {
+    dst->arena()->Reset();
+  }
+
+  RETURN_NOT_OK(iter_->PrepareBatch(&n));
+  dst->Resize(n);
+
+  // materialize based on the selection vector, or by the predicate to be evaluated
+  // might make sense to have the predicate evaluation be a function of the decoder
+  RETURN_NOT_OK(MaterializeBlock(dst));
+  RETURN_NOT_OK(iter_->FinishBatch());
+
+  return Status::OK();
+}
+
 Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
   // Initialize the selection vector indicating which rows have been
   // been deleted.
@@ -512,10 +529,36 @@ Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
   for (const auto& col_pred : col_idx_predicates_) {
     // Materialize the column itself into the row block.
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
-    RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
+    // original
+    // RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
+
+    // iter_->MaterializeColumn() should take in as an input col_pred and evaluate
+    // it if it can, returning the SelectionVector with the proper results
+    // &dst_col at this point should also be pruned, and we 
+    //
+    // result: evaluate inside MaterializeColumn and return the selectionvector with TRUE, specifying that we've completed the evaluation
+    // result: cannot evaluate inside MaterializeColumn, need to call Evaluate()
+    //   post-condition: dst_col is populated with the data from the column block
+    bool eval_complete = false;
+
+    //
+    iter_->MaterializeFilteredColumn(get<1>(col_pred), get<0>(col_pred), eval_complete, dst->selection_vector(), dst_col);
+    
+    if(eval_complete) {
+      // If the block doesn't span the range that we're trying to evaluate, exit early
+      DVLOG(1) << "0/" << dst->nrows() << " passed predicate";
+      return Status::OK();
+    }
+    else {
+      // If the current block does span the range that we're trying to evaluate, evaluate the column predicate.
+      get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
+    }
+
 
     // Evaluate the column predicate.
-    get<1>(col_pred).Evaluate(dst_col, column_bitmap, dst->selection_vector());
+    // iterates through each cell in dst_col and calls column_.type_info()->Compare(cell, col_pred->[upper_|lower_])
+    
+    // get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
 
     // If after evaluating this predicate the entire row block has been filtered
     // out, we don't need to materialize other columns at all.
@@ -540,6 +583,54 @@ string MaterializingIterator::ToString() const {
   string s;
   s.append("Materializing(").append(iter_->ToString()).append(")");
   return s;
+}
+
+Status SecondaryIndexIterator::SecondaryIndexIterator() {
+
+}
+
+Status SecondaryIndexIterator::Init() {
+  // open the secondary index blocks
+}
+
+// SecondaryIndexIterator should have a SecondaryIndex object
+// We may have a SecondaryIndexIteratorVector rather than a SecondaryIndexIterator
+Status SecondaryIndexIterator::MaterializeBlock(RowBlock *dst) {
+  RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
+
+  for (const auto& col_pred : col_idx_predicates_) {
+
+    // Materialize the column itself into the row block.
+    ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
+    RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
+
+    SecondaryIndex *secondary_index = col_name_indexes_[col_pred.name()];
+
+    // if the column has an index, use it to evaluate with CheapEvaluate, otherwise, use Evaluate
+
+
+    // Evaluate the column predicate.
+    // g<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
+    get<1>(col_pred).CheapEvaluate(dst_col, secondary_index, dst->selection_vector());  // This should be significantly cheaper than evaluate
+    // for a bitmap, this should simply copy the selection vector corresponding to the correct bitcolumn
+
+    // If after evaluating this predicate the entire row block has been filtered
+    // out, we don't need to materialize other columns at all.
+    if (!dst->selection_vector()->AnySelected()) {
+      DVLOG(1) << "0/" << dst->nrows() << " passed predicate";
+      return Status::OK();
+    }
+  }
+
+  for (size_t col_idx : non_predicate_column_indexes_) {
+    // Materialize the column itself into the row block.
+    ColumnBlock dst_col(dst->column_block(col_idx));
+    RETURN_NOT_OK(iter_->MaterializeColumn(col_idx, &dst_col));
+  }
+
+  DVLOG(1) << dst->selection_vector()->CountSelected() << "/"
+           << dst->nrows() << " passed predicate";
+  return Status::OK();
 }
 
 ////////////////////////////////////////////////////////////

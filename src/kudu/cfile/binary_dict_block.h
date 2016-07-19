@@ -146,6 +146,10 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
  private:
   Status CopyNextDecodeStrings(size_t* n, ColumnDataView* dst);
+  
+  // Store the decoded values of the min/max of the block
+  void *blockMin;
+  void *blockMax; 
 
   Slice data_;
   bool parsed_;

@@ -130,11 +130,10 @@ class DiskRowSetWriter {
   gscoped_ptr<cfile::BloomFileWriter> bloom_writer_;
   gscoped_ptr<cfile::CFileWriter> ad_hoc_index_writer_;
 
-  // We should store the (column_name => SecondaryIndexWriter*)
-
   // @andrwng The writers each correspond to a single column's bitmap
-  //  or should this be bitmap_vector_writer
-  std::vector<gscoped_ptr<cfile::SecondaryIndexWriter>> secondary_index_writers_;
+  // (column_name: String => SecondaryIndexWriter *)
+  // std::vector<gscoped_ptr<cfile::SecondaryIndexWriter>> secondary_index_writers_;
+  std::map<std::string, gscoped_ptr<cfile::SecondaryIndexWriter>> secondary_index_writers_;
 
   // The last encoded key written.
   faststring last_encoded_key_;

@@ -450,6 +450,7 @@ Status CFileSet::Iterator::PrepareColumn(size_t idx) {
     // columns completely eliminated the block).
     //
     // Either way, we need to seek it to the correct offset.
+    // @andrwng: this process is moving the iterator to the proper location in block
     RETURN_NOT_OK(col_iter->SeekToOrdinal(cur_idx_));
   }
 
@@ -474,6 +475,27 @@ Status CFileSet::Iterator::PrepareColumn(size_t idx) {
 Status CFileSet::Iterator::InitializeSelectionVector(SelectionVector *sel_vec) {
   sel_vec->SetAllTrue();
   return Status::OK();
+}
+
+// @andrwng
+// result: evaluate inside MaterializeColumn and return the selectionvector with TRUE, specifying that we've completed the evaluation
+//   or  : cannot evaluate inside MaterializeColumn, need to call Evaluate()
+// post-condition: dst_col is populated with the data from the column block
+//
+// In order to handle updates that aren't reflected in the disk, consider adding some sort of dirtybit that would tell us whether or not
+//   the given column block (an update has been applied and stored as a delta file) 
+Status CFileSet::Iterator::MaterializeFilteredColumn(ColumnPredicate col_pred,
+                                                     size_t col_idx,
+                                                     bool& eval_complete,
+                                                     SelectionVector *sel,
+                                                     ColumnBlock *dst) {
+  CHECK_EQ(prepared_count_, dst->nrows());
+  DCHECK_LT(col_idx, col_iters_.size());
+
+  RETURN_NOT_OK(PrepareColumn(col_idx));
+  ColumnIterator* iter = col_iters_[col_idx];
+  // CheapScan should return the dst with the materialized block if within range
+  return iter->CheapScan(col_pred, eval_complete, sel, dst);
 }
 
 Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {

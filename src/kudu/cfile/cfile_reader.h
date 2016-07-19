@@ -363,7 +363,7 @@ class CFileIterator : public ColumnIterator {
     return io_stats_;
   }
 
-  // It the column is dictionary-coded, returns the decoder
+  // If the column is dictionary-coded, returns the decoder
   // for the cfile's dictionary block. This is called by the
   // StringDictBlockDecoder.
   BinaryPlainBlockDecoder* GetDictDecoder() { return dict_decoder_.get();}

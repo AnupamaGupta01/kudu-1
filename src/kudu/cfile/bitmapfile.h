@@ -29,14 +29,18 @@ class BitmapFileWriter : public SecondaryIndexWriter {
 
 class BitmapFileReader : public SecondaryIndexReader {
   public:
-    Status Open(gscoped_ptr<fs::ReadableBlock> block,
+    static Status Open(gscoped_ptr<fs::ReadableBlock> block,
                 const ReaderOptions& options,
                 gscoped_ptr<SecondaryIndexReader> *reader);
-    Status OpenNoInit(gscoped_ptr<fs::ReadableBlock> block,
+    static Status OpenNoInit(gscoped_ptr<fs::ReadableBlock> block,
                 const ReaderOptions& options,
                 gscoped_ptr<SecondaryIndexReader> *reader);
     Status Init();
     Status CheckValueExists(bool *maybe_present);
+    // This should make the call to BitmapIndex::Equals/Range
+    // This should be called by CFileSet::foo (e.g. FindRow)
+    //    CFileSet::foo called by DiskRowSet::bar (e.g. MutateRow)
+    Status Evaluate(ColumnPredicate p);
   private:
     BitmapFileReader(gscoped_ptr<CFileReader> reader, const ReaderOptions& options);
     Status ParseBlockHeader(const Slice &block,

@@ -5,7 +5,7 @@
 #include "kudu/util/slice.h"
 
 namespace kudu {
-	
+
 class SecondaryIndexBuilder {
   public:
     void Clear();
@@ -16,11 +16,14 @@ class SecondaryIndexBuilder {
     size_t count_rows();
 }
 
+template <DataType Type>
 class SecondaryIndex {
   public:
   	// input would be ColumnPredicate
   	// output would be SelectionVector
-    Status Scan();
+    void Equals(const void* value, SelectionVector *sel);
+    void Range(const void* lower, const void* upper, SelectionVector *sel);
+    // void NotNull();
 }
 
 } // namespace kudu

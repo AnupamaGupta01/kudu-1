@@ -126,7 +126,7 @@ class CFileSet : public std::enable_shared_from_this<CFileSet> {
   // index pertains to more than one column, as in the case of composite keys.
   gscoped_ptr<CFileReader> ad_hoc_idx_reader_;
   gscoped_ptr<BloomFileReader> bloom_reader_;
-  std::vector<gscoped_ptr<SecondaryIndexReader>> secondary_index_readers;
+  std::map<string, gscoped_ptr<SecondaryIndexReader>> secondary_index_readers;
 };
 
 

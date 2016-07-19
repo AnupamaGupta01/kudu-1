@@ -122,6 +122,10 @@ class BinaryPlainBlockDecoder : public BlockDecoder {
   Slice data_;
   bool parsed_;
 
+  // Store the decoded values of the min/max of the block
+  void *blockMin;
+  void *blockMax; 
+
   // The parsed offsets.
   // This array also contains one extra offset at the end, pointing
   // _after_ the last entry. This makes the code much simpler.

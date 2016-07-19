@@ -189,6 +189,13 @@ KuduColumnSpec* KuduColumnSpec::Nullable() {
   return this;
 }
 
+// @andrwng
+KuduColumnSpec* KuduColumnSpec::Bitmapped() {
+  data_->is_bitmapped = true;
+  data_->bitmapped = true;
+  return this;
+}
+
 KuduColumnSpec* KuduColumnSpec::RemoveDefault() {
   data_->remove_default = true;
   return this;

@@ -209,6 +209,30 @@ Status BinaryDictBlockDecoder::ParseHeader() {
   return Status::OK();
 }
 
+bool BinaryDictBlockDecoder::CheckIfInRange(void *cell) {
+  // Determine whether or not the cell's value is within the range of this dictionary block
+  // Consult the dict_decoder_ for the min and max values
+}
+
+Status BinaryDictBlockDecoder::Evaluate(ColumnPredicate col_pred, SelectionVector* sel, bool& eval_complete) {
+  // This should check some internal structure to determine whether the predicate is not assiciated with the values
+  // in this block, e.g. if the values on thisb block only span "California" to "Colorado", any query on "New York" 
+  // should return almost immediately without scanning any of the encoded data
+  //
+  // col_pred.raw_lower()/col_pred.raw_upper() are the bouns that we should check with
+  // do a .Compare on the raw min/max values for this block
+  // If there are values within those bounds in the block
+  //   do not change the SelectionVector, set eval_complete to false
+  // Else
+  //   Set the selectionVector to all 0s and set eval_complete to true
+  if (/* Compare the raw min/max values with the col_pred.raw_lower()/col_pred.raw_upper() */) {
+
+  }
+  else {
+    sel->SetAllFalse();
+  }
+}
+
 void BinaryDictBlockDecoder::SeekToPositionInBlock(uint pos) {
   data_decoder_->SeekToPositionInBlock(pos);
 }

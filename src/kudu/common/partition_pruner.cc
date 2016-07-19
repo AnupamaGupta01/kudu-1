@@ -348,7 +348,7 @@ void PartitionPruner::Init(const Schema& schema,
         break;
       }
       if (scan_spec.exclusive_upper_bound_partition_key() <= get<0>(*range)) {
-        partition_key_ranges.pop_back();
+        partition_key_pranges.pop_back();
       } else {
         get<1>(*range) = scan_spec.exclusive_upper_bound_partition_key();
       }
@@ -424,5 +424,8 @@ string PartitionPruner::ToString(const Schema& schema,
 
   return JoinStrings(strings, ", ");
 }
+
+// PartitionPruner::ShouldPruneNonKeys()
+//
 
 } // namespace kudu

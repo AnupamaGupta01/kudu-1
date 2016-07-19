@@ -14,6 +14,7 @@
 
 // If confused, see bloomfile.h
 // These should all be virtual
+template <DataType type>
 class SecondaryIndexWriter {
   public:
     SecondaryIndexWriter();
@@ -22,12 +23,13 @@ class SecondaryIndexWriter {
     virtual Status Finish();
     virtual Status FinishAndReleaseBlock(fs::ScopedWriteableBlockCloser* closer);
     virtual size_t written_size() const;
-   private:
-   	Status FinishCurrentSecondaryIndexBlock();
-   	gscoped_ptr<cfile::CFileWriter> writer_;
-   	SecondaryIndexBuilder index_builder_;
+   // private:
+   // 	Status FinishCurrentSecondaryIndexBlock();
+   // 	gscoped_ptr<cfile::CFileWriter> writer_;
+   // 	SecondaryIndexBuilder index_builder_;
 }
 
+template <DataType Type>
 class SecondaryIndexReader {
   public:
   	virtual Status Open(gscoped_ptr<fs::ReadableBlock> block,
@@ -38,14 +40,14 @@ class SecondaryIndexReader {
                 gscoped_ptr<SecondaryIndexReader> *reader);
   	virtual Status Init();
   	virtual Status CheckValueExists(bool *maybe_present);
-  private:
-  	SecondaryIndexReader(gscoped_ptr<CFileReader> reader, const ReaderOptions& options);
-  	// Returns the parsed header inside *hdr, and returns
-  	// a Slice to the secondary index inside *index_data
-  	Status ParseBlockHeader(const Slice &block,
-  							SecondaryIndexHeaderPB *hdr,
-  							Slice *index_data) const;
-  	Status InitOnce();
-  	size_t memory_footprint_excluding_reader() const;
-  	gscoped_ptr<CFileReader> reader_;
+  // private:
+  // 	SecondaryIndexReader(gscoped_ptr<CFileReader> reader, const ReaderOptions& options);
+  // 	// Returns the parsed header inside *hdr, and returns
+  // 	// a Slice to the secondary index inside *index_data
+  // 	Status ParseBlockHeader(const Slice &block,
+  // 							SecondaryIndexHeaderPB *hdr,
+  // 							Slice *index_data) const;
+  // 	Status InitOnce();
+  // 	size_t memory_footprint_excluding_reader() const;
+  // 	gscoped_ptr<CFileReader> reader_;
 }

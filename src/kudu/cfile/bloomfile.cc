@@ -187,7 +187,6 @@ Status BloomFileReader::InitOnce() {
                               reader_->ToString());
   }
 
-  BlockPointer validx_root = reader_->validx_root();
 
   // Ugly hack: create a per-cpu iterator.
   // Instead this should be threadlocal, or allow us to just

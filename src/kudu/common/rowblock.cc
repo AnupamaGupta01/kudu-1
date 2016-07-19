@@ -29,6 +29,11 @@ SelectionVector::SelectionVector(size_t row_capacity)
   CHECK_GT(n_bytes_, 0);
 }
 
+void SelectionVector::CopyFromBitmap(SelectionVector& other_vector) {
+  // basically a copy constructor
+  // set internals
+}
+
 void SelectionVector::Resize(size_t n_rows) {
   size_t new_bytes = BitmapSize(n_rows);
   CHECK_LE(new_bytes, bytes_capacity_);

@@ -18,15 +18,25 @@ class BitmapIndexBuilder : public SecondaryIndexBuilder {
   	  return Slice();
   	}
     size_t count_rows();
-  private:
 }
 
-class BitmapIndex : public SecondaryIndex {
+// This should be a template for DataType
+template <DataType Type>
+class BitmapIndex : public SecondaryIndex<DataType> {
 public:
-  Status Scan();
+  void Equals(const void* value, SelectionVector *sel);
+  void Range(const void* lower, const void* upper, SelectionVector *sel);
+
 private:
-  std::vector<SelectionVector *> bitmaps_;
-  std::unordered_map<StringPiece, uint32_t, GoodFastHash<StringPiece> > dictionary_;
+  // // store the bitmap and the number of 1s
+  // // this would be helpful to cheaply check the for existence
+  // std::vector<std::tuple<SelectionVector *, uint32_t>> bitmaps_;
+
+  std::map<Type, SelectionVector *> bitmaps_;
+  // // store the value and the index in bitmaps_ of the proper SelectionVector
+  // // stored in order so we can evaluate inequality predicates
+  // std::map<DataType, uint32_t, GoodFastHash<DataType> > dictionary_;
+
 } // namespace kudu
 
 #endif // KUDU_CFILE_BITMAP_INDEX_H
