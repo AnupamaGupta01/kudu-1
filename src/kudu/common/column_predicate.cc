@@ -302,7 +302,6 @@ void ColumnPredicate::CheapEvalute(const ColumnBlock& block, const SecondaryInde
   }
 }
 
-// @andrwng TODO: extend ColumnBitmaps to something like SecondaryIndex
 void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) const {
   CHECK_NOTNULL(sel);
 

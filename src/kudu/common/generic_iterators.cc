@@ -529,8 +529,7 @@ Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
   for (const auto& col_pred : col_idx_predicates_) {
     // Materialize the column itself into the row block.
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
-    // original
-    // RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
+    
 
     // iter_->MaterializeColumn() should take in as an input col_pred and evaluate
     // it if it can, returning the SelectionVector with the proper results
@@ -541,7 +540,7 @@ Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
     //   post-condition: dst_col is populated with the data from the column block
     bool eval_complete = false;
 
-    //
+    // TODO: for secondary indexing, the below call should copy the selection vector to dst
     iter_->MaterializeFilteredColumn(get<1>(col_pred), get<0>(col_pred), eval_complete, dst->selection_vector(), dst_col);
     
     if(eval_complete) {
@@ -550,6 +549,8 @@ Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
       return Status::OK();
     }
     else {
+      // original
+      RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
       // If the current block does span the range that we're trying to evaluate, evaluate the column predicate.
       get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
     }

@@ -88,6 +88,7 @@ bool BinaryDictBlockBuilder::IsBlockFull(size_t limit) const {
 }
 
 int BinaryDictBlockBuilder::AddCodeWords(const uint8_t* vals, size_t count) {
+  // vals is a Slice pointer
   DCHECK(!finished_);
   DCHECK_GT(count, 0);
   size_t i;
@@ -118,8 +119,17 @@ int BinaryDictBlockBuilder::AddCodeWords(const uint8_t* vals, size_t count) {
       const char* s_content = reinterpret_cast<const char*>(s_ptr);
       codeword = dict_block_.Count() - 1;
       InsertOrDie(&dictionary_, StringPiece(s_content, src->size()), codeword);
+      // TODO andrwng: check if the string is greater than the block_min/block_max and adjust accordingly
     }
     // The data block is full
+    //
+    // @andrwng
+    // Not sure if this is a bug or not, but the dict_block_ could add the word and it wouldn't be 
+    // reflected by the data_builder_
+    //
+    // TODO: @andrwng what should we do if we don't actually add the codeword to the data_block?
+    //       my fear is that if we fail to add the value but still reflect the insert in the dict_block_, then
+    //       we may try to search for a min that is in the data, but the dictionary says this block doesn't contain it
     if (data_builder_->Add(reinterpret_cast<const uint8_t*>(&codeword), 1) == 0) {
       break;
     }
@@ -219,6 +229,9 @@ Status BinaryDictBlockDecoder::Evaluate(ColumnPredicate col_pred, SelectionVecto
   // in this block, e.g. if the values on thisb block only span "California" to "Colorado", any query on "New York" 
   // should return almost immediately without scanning any of the encoded data
   //
+  // May be easier to pass in the type_info so we can do comparisons more easily, although this might also go against
+  // the idea that we should not use the template Compare as often
+  //
   // col_pred.raw_lower()/col_pred.raw_upper() are the bouns that we should check with
   // do a .Compare on the raw min/max values for this block
   // If there are values within those bounds in the block
@@ -240,6 +253,7 @@ void BinaryDictBlockDecoder::SeekToPositionInBlock(uint pos) {
 Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* exact) {
   if (mode_ == kCodeWordMode) {
     DCHECK(value_void != nullptr);
+    // This will seek to the string word, which should have the codeword as its index
     Status s = dict_decoder_->SeekAtOrAfterValue(value_void, exact);
     if (!s.ok()) {
       // This case means the value_void is larger that the largest key
@@ -261,7 +275,7 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
 
 Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* dst) {
   DCHECK(parsed_);
-  CHECK_EQ(dst->type_info()->physical_type(), BINARY);
+  CHECK_EQ(dst->type_info()->physical_type(), BINARY);  // from the AddMapping
   DCHECK_LE(*n, dst->nrows());
   DCHECK_EQ(dst->stride(), sizeof(Slice));
 

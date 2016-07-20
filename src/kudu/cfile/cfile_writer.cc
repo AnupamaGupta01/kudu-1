@@ -176,8 +176,6 @@ Status CFileWriter::Start() {
   off_ += buf.size();
 
   BlockBuilder *bb;
-  // TODO
-  // @andrwng Figure out a way to connect this with the BitmapIndex, since we wouldn't want to duplicate the dictionary block
   RETURN_NOT_OK(type_encoding_info_->CreateBlockBuilder(&bb, &options_));
   data_block_.reset(bb);
 

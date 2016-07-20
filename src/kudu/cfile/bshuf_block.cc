@@ -82,6 +82,17 @@ Slice BShufBlockBuilder<UINT32>::Finish(rowid_t ordinal_pos) {
   return ret;
 }
 
+template<>
+Status BShufBlockDecoder<UINT32>::Evaluate(ColumnPredicate col_pred,
+                                           SelectionVector* sel,
+                                           bool& eval_complete, 
+                                           ColumnDataView* dst) {
+  // Consult the block_min and block_max values and do the comparison on them
+  // to determine whether or not we can skip this block
+  //
+  // 
+}
+
 // Template specialization for UINT32, dynamically decoded blocks of
 // bitshuffled UINT16 OR UINT8 to UINT32.
 template<>

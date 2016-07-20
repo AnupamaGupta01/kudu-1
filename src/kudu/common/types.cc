@@ -47,6 +47,16 @@ int TypeInfo::Compare(const void *lhs, const void *rhs) const {
   return compare_func_(lhs, rhs);
 }
 
+// @andrwng
+int TypeInfo::CompareBlock(PredicateType pred, const ColumnBlock& block, SelectionVector *sel) const {
+  if (block.is_nullable()) {
+    for (size_t i = 0; i < block.nrows(); i++) {
+      if (!sel->IsRowSelected(i)) continue;
+      const void *cell = block.nullable_cell_ptr(i);
+    }
+  }
+}
+
 bool TypeInfo::AreConsecutive(const void* a, const void* b) const {
   return are_consecutive_func_(a, b);
 }

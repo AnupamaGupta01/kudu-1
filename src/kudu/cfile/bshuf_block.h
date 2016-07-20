@@ -78,6 +78,7 @@ class BShufBlockBuilder : public BlockBuilder {
     return EstimateEncodedSize() > limit;
   }
 
+  // adds <count> number of values to the data_, size taken from TypeTraits
   int Add(const uint8_t* vals_void, size_t count) OVERRIDE {
     const CppType* vals = reinterpret_cast<const CppType* >(vals_void);
     int added = 0;
@@ -353,6 +354,8 @@ class BShufBlockDecoder : public BlockDecoder {
   uint32_t num_elems_;
   uint32_t compressed_size_;
   uint32_t num_elems_after_padding_;
+
+
 
   // The size of each decoded element. In the case that the input range was
   // smaller than the type, this may be smaller than 'size_of_type'.

@@ -893,6 +893,11 @@ Status CFileIterator::FinishBatch() {
   return Status::OK();
 }
 
+// PrepareBatch applies DeltaFiles when it materializes, allowing you to get the up-to-date data
+// If we use any internal[-to-block] data structures, those will not be up-to-date
+//
+// We should detect the presence of delta files that pertain to the block if they exist
+// If so, use Scan instead
 Status CFileIterator::CheapScan(bool& eval_complete, ColumnPredicate& col_pred, SelectionVector *sel, ColumnBlock *dst) {
   // Iterate through the prepared blocks, each should have its own decoder
   // Each block represents a chunk of rows for a single column block
@@ -900,19 +905,6 @@ Status CFileIterator::CheapScan(bool& eval_complete, ColumnPredicate& col_pred, 
   // This will take in the current batch and:
   //   1. evaluate the predicate if possible
   //   2. decode data into column block if necessary
-  bool eval_complete = false;
-  pb->dblk_->Evaluate(col_pred, SelectionVector* sel, eval_complete, &remaining_dst)
-
-  if (eval_complete) {
-    // At this point, the selection vector should be 
-    return Status::OK();
-  }
-  else {
-
-  }
-
-
-
   for (PreparedBlock *pb : prepared_blocks_) {
     if (pb->needs_rewind_) {
       // Seek back to the saved position.
@@ -932,6 +924,8 @@ Status CFileIterator::CheapScan(bool& eval_complete, ColumnPredicate& col_pred, 
       size_t count = nrows;
       while (count > 0) {
         bool not_null = false;
+
+        // gets the number of contigious 0s/1s, up to count
         size_t nblock = pb->rle_decoder_.GetNextRun(&not_null, count);
         DCHECK_LE(nblock, count);
         if (PREDICT_FALSE(nblock == 0)) {
@@ -942,6 +936,7 @@ Status CFileIterator::CheapScan(bool& eval_complete, ColumnPredicate& col_pred, 
 
         size_t this_batch = nblock;
         if (not_null) {
+          // AW: this batch is ones in the bitmap, copy the values to remaining_dst
           // TODO: Maybe copy all and shift later?
           RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
           DCHECK_EQ(nblock, this_batch);
@@ -964,12 +959,10 @@ Status CFileIterator::CheapScan(bool& eval_complete, ColumnPredicate& col_pred, 
       }
     } else {
       // Fetch as many as we can from the current datablock.
-      size_t this_batch = rem;
-      RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
-      pb->needs_rewind_ = true;
-      DCHECK_LE(this_batch, rem);
-
+      // Rather than reading anything from disk, we should make the call to pb->dblk_->Evaluate()
+      //   this should consult internal data to return whether or not we should continue with the CopyNextValues
       bool eval_complete = false;
+      // consult the block's helpers (either bitmap or min/max)
       pb->dblk_->Evaluate(col_pred, SelectionVector* sel, eval_complete, &remaining_dst)
 
       if (eval_complete) {
@@ -977,7 +970,10 @@ Status CFileIterator::CheapScan(bool& eval_complete, ColumnPredicate& col_pred, 
         return Status::OK();
       }
       else {
-
+        size_t this_batch = rem;
+        RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
+        pb->needs_rewind_ = true;
+        DCHECK_LE(this_batch, rem);
       }
 
 
