@@ -19,6 +19,7 @@
 
 #include <glog/logging.h>
 #include <algorithm>
+#include <unordered_set>
 
 #include "kudu/cfile/cfile_reader.h"
 #include "kudu/cfile/cfile_util.h"
@@ -213,9 +214,12 @@ void BinaryDictBlockDecoder::SeekToPositionInBlock(uint pos) {
   data_decoder_->SeekToPositionInBlock(pos);
 }
 
+// value_void is the string word
 Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* exact) {
   if (mode_ == kCodeWordMode) {
     DCHECK(value_void != nullptr);
+    // SeekAtOrAfterValue doesn't make sense if the dict_decoder_ is not sorted
+    // 
     Status s = dict_decoder_->SeekAtOrAfterValue(value_void, exact);
     if (!s.ok()) {
       // This case means the value_void is larger that the largest key
@@ -232,6 +236,68 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
   } else {
     DCHECK_EQ(mode_, kPlainBinaryMode);
     return data_decoder_->SeekAtOrAfterValue(value_void, exact);
+  }
+}
+
+Status BinaryDictBlockDecoder::GetDictOrder() {
+  // Probably have to do some sorting of the codewords here
+  // Maybe store the ordering in yet another separate block?  
+}
+
+Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnPredicate& pred,
+                                                 SelectionVector *sel,
+                                                 bool& eval_complete) {
+  // start empty and scan for the correct values
+  sel->SetAllFalse();
+  switch (pred.predicate_type()) {
+    case PredicateType::None: {
+      eval_complete = true;
+      return Status::OK();
+    }
+    case PredicateType::Range: {
+      eval_complete = false;
+      return Status::OK();
+    }
+    case PredicateType::Equality: {
+      // assuming mode_ is kCodeWordMode for now
+      // scan the dict_decoder for the index of the word
+      bool exact = false;
+      // Status s = dict_decoder_->SeekAtOrAfterValue(pred.raw_lower(), &exact);
+      // pred_codewords stores the codewords that satisfy the predicate
+      std::unordered_set<uint32_t> pred_codewords;
+      for (int i = 0; i < dict_decoder_->Count(); i++) {
+        // Scan through the rows in the decoder and determine which satisfy the predicate
+        int c = dict_decoder_->string_at_index[i].compare(pred.raw_lower());
+        // TODO: here we could check the lower and upper and determine the proper c pattern 
+        // Store the codewords that satisfy the predicate to some storage
+        if (c == 0) {
+          pred_codewords.push_back(i);
+        }
+      }
+
+      if (pred_codewords.empty()) {
+        eval_complete = true;
+        return Status::OK(); 
+      }
+
+      size_t nrows = data_decoder_->Count();
+      data_decoder_->SeekToPositionInBlock(0);
+      data_decoder_->CopyNextValuesToArray(nrows, data);
+      codeword_buf_.resize(nrows*sizeof(uint32_t));
+      
+      // iterate through the data and check if the which satisfy the predicate
+      for (int i = 0; i < nrows; i++) {
+        uint32_t codeword = *reinterpret_cast<uint32_t*>(&codeword_buf_[i*sizeof(uint32_t)]);
+        if (pred_codewords.find(codeword) == pred_codewords.end()) {
+          BitmapSet(sel->mutable_bitmap(), i);
+        }
+      }
+    }
+    case PredicateType::IsNotNull: {
+      eval_complete = false;
+      return Status::OK();
+    }
+
   }
 }
 

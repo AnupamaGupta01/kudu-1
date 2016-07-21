@@ -504,6 +504,42 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
   return Status::OK();
 }
 
+Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
+
+  // Materialize the column and call EvalAndScan, which should scan the data with the decoder, 
+  // and return with the data filled out, but the evaluation should not have to depend on the
+  // materialized data
+  //
+  // This should at worst be equivalent to calling MaterializeColumn and then calling Evaluate
+  RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
+  for (const auto& col_pred : col_idx_predicates_) {
+    // Materialize the column with the decoder's Evaluate function
+    ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
+    bool eval_complete = false;
+    RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(get<0>(col_pred),
+                                                  get<1>(col_pred),
+                                                  &dst_col,
+                                                  dst->selection_vector(),
+                                                  eval_complete));
+    if (!eval_complete) {
+      get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
+    }
+    if (!dst->selection_vector()->AnySelected()) {
+      DVLOG(1) << "0/" << dst->nrows() << " passed predicate";
+      return Status::OK();
+    }
+  }
+  for (size_t col_idx : non_predicate_column_indexes_) {
+    // Materialize the column itself into the row block.
+    ColumnBlock dst_col(dst->column_block(col_idx));
+    RETURN_NOT_OK(iter_->MaterializeColumn(col_idx, &dst_col));
+  }
+
+  DVLOG(1) << dst->selection_vector()->CountSelected() << "/"
+           << dst->nrows() << " passed predicate";
+  return Status::OK();
+}
+
 Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
   // Initialize the selection vector indicating which rows have been
   // been deleted.

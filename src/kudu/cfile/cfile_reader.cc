@@ -893,8 +893,20 @@ Status CFileIterator::FinishBatch() {
   return Status::OK();
 }
 
+std::vector<PreparedBlock> CFileIterator::GetBlocks(bool& is_nullable) {
+  // Rather than going through this Scan()
+  // 
+  // TODO: all the checks in Scan
+  CHECK(seeked_) << "not seeked";
+  is_nullable = reader_->is_nullable();
+  return &prepared_blocks_;
+}
 
-Status CFileIterator::Scan(ColumnBlock *dst) {
+// Status CFileIterator::Scan(ColumnBlock *dst) {
+Status CFileIterator::Scan(ColumnPredicate pred,
+                           ColumnBlock *dst,
+                           SelectionVector *sel,
+                           bool& eval_complete) {
   CHECK(seeked_) << "not seeked";
 
   // Use a column data view to been able to advance it as we read into it.
@@ -976,6 +988,8 @@ Status CFileIterator::Scan(ColumnBlock *dst) {
     } else {
       break;
     }
+
+    pb->dblk_->EvaluatePredicate(pred, sel, eval_complete);
   }
 
   DCHECK_EQ(rem, 0) << "Should have fetched exactly the number of prepared rows";
