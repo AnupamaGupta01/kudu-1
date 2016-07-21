@@ -471,7 +471,6 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
   // bool is_nullable;
   // std::vector<PreparedBlock> prepared_blocks = iter->GetBlocks(is_nullable);
 
-
 }
 
 Status CFileSet::Iterator::FinishBatch() {

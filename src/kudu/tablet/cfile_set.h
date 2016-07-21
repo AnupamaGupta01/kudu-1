@@ -146,6 +146,12 @@ class CFileSet::Iterator : public ColumnwiseIterator {
 
   virtual Status MaterializeColumn(size_t col_idx, ColumnBlock *dst) OVERRIDE;
 
+  virtual Status EvalAndMaterializeColumn(size_t col_idx,
+                                          ColumnPredicate pred,
+                                          ColumnBlock *dst,
+                                          SelectionVector *sel,
+                                          bool& eval_complete) OVERRIDE;
+
   virtual Status FinishBatch() OVERRIDE;
 
   virtual bool HasNext() const OVERRIDE {

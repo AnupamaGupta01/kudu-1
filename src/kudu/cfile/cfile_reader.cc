@@ -503,6 +503,14 @@ Status DefaultColumnValueIterator::Scan(ColumnBlock *dst)  {
   return Status::OK();
 }
 
+Status DefaultColumnValueIterator::Scan(ColumnPredicate pred,
+            ColumnBlock *dst,
+            SelectionVector *sel,
+            bool& eval_complete) {
+  // TODO: fill this out
+  return Scan(dst);
+}
+
 Status DefaultColumnValueIterator::FinishBatch() {
   ordinal_ += batch_;
   return Status::OK();
@@ -902,7 +910,98 @@ std::vector<PreparedBlock> CFileIterator::GetBlocks(bool& is_nullable) {
   return &prepared_blocks_;
 }
 
-// Status CFileIterator::Scan(ColumnBlock *dst) {
+Status CFileIterator::Scan(ColumnBlock *dst) {
+// Status CFileIterator::Scan(ColumnPredicate pred,
+//                            ColumnBlock *dst,
+//                            SelectionVector *sel,
+//                            bool& eval_complete) {
+  CHECK(seeked_) << "not seeked";
+
+  // Use a column data view to been able to advance it as we read into it.
+  ColumnDataView remaining_dst(dst);
+
+  uint32_t rem = last_prepare_count_;
+  DCHECK_LE(rem, dst->nrows());
+
+  for (PreparedBlock *pb : prepared_blocks_) {
+    if (pb->needs_rewind_) {
+      // Seek back to the saved position.
+      SeekToPositionInBlock(pb, pb->rewind_idx_);
+      // TODO: we could add a mark/reset like interface in BlockDecoder interface
+      // that might be more efficient (allowing the decoder to save internal state
+      // instead of having to reconstruct it)
+    }
+
+    if (reader_->is_nullable()) {
+      DCHECK(dst->is_nullable());
+
+      size_t nrows = std::min(rem, pb->num_rows_in_block_ - pb->idx_in_block_);
+
+      // Fill column bitmap
+      size_t count = nrows;
+      while (count > 0) {
+        bool not_null = false;
+        size_t nblock = pb->rle_decoder_.GetNextRun(&not_null, count);
+        DCHECK_LE(nblock, count);
+        if (PREDICT_FALSE(nblock == 0)) {
+          return Status::Corruption(
+            Substitute("Unexpected EOF on NULL bitmap read. Expected at least $0 more rows",
+                       count));
+        }
+
+        size_t this_batch = nblock;
+        if (not_null) {
+          // TODO: Maybe copy all and shift later?
+          RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
+          DCHECK_EQ(nblock, this_batch);
+          pb->needs_rewind_ = true;
+        } else {
+#ifndef NDEBUG
+          kudu::OverwriteWithPattern(reinterpret_cast<char *>(remaining_dst.data()),
+                                     remaining_dst.stride() * nblock,
+                                     "NULLNULLNULLNULLNULL");
+#endif
+        }
+
+        // Set the ColumnBlock bitmap
+        remaining_dst.SetNullBits(this_batch, not_null);
+
+        rem -= this_batch;
+        count -= this_batch;
+        pb->idx_in_block_ += this_batch;
+        remaining_dst.Advance(this_batch);
+      }
+    } else {
+      // Fetch as many as we can from the current datablock.
+      size_t this_batch = rem;
+      RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
+      pb->needs_rewind_ = true;
+      DCHECK_LE(this_batch, rem);
+
+      // If the column is nullable, set all bits to true
+      if (dst->is_nullable()) {
+        remaining_dst.SetNullBits(this_batch, true);
+      }
+
+      rem -= this_batch;
+      pb->idx_in_block_ += this_batch;
+      remaining_dst.Advance(this_batch);
+    }
+
+    // If we didn't fetch as many as requested, then it should
+    // be because the current data block ran out.
+    if (rem > 0) {
+      DCHECK_EQ(pb->dblk_->Count(), pb->dblk_->GetCurrentIndex()) <<
+        "dblk stopped yielding values before it was empty.";
+    } else {
+      break;
+    }
+  }
+
+  DCHECK_EQ(rem, 0) << "Should have fetched exactly the number of prepared rows";
+  return Status::OK();
+}
+
 Status CFileIterator::Scan(ColumnPredicate pred,
                            ColumnBlock *dst,
                            SelectionVector *sel,

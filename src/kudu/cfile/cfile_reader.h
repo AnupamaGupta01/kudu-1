@@ -245,6 +245,16 @@ class ColumnIterator {
   // calls to Scan() will re-read the same values.
   virtual Status Scan(ColumnBlock *dst) = 0;
 
+  // Copy values into the prepared column block.
+  // Additionally evaluate the column predicate as best as possible
+  // Should consult the PreparedBlocks' decoders and return the SelectionVector
+  // so that it corresponds to the evaluation of the ColumnPredicate
+  // Set eval_complete to true if the decoder completely evaluates the predicate
+  virtual Status Scan(ColumnPredicate pred,
+                      ColumnBlock *dst,
+                      SelectionVector *sel,
+                      bool& eval_complete) = 0;
+
   // Finish processing the current batch, advancing the iterators
   // such that the next call to PrepareBatch() will start where the previous
   // batch left off.
@@ -274,6 +284,10 @@ class DefaultColumnValueIterator : public ColumnIterator {
 
   Status PrepareBatch(size_t *n) OVERRIDE;
   Status Scan(ColumnBlock *dst) OVERRIDE;
+  Status Scan(ColumnPredicate pred,
+                      ColumnBlock *dst,
+                      SelectionVector *sel,
+                      bool& eval_complete) OVERRIDE;
   Status FinishBatch() OVERRIDE;
 
   const IteratorStats& io_statistics() const OVERRIDE { return io_stats_; }
@@ -347,6 +361,10 @@ class CFileIterator : public ColumnIterator {
   // This does _not_ advance the position in the underlying file. Multiple
   // calls to Scan() will re-read the same values.
   Status Scan(ColumnBlock *dst) OVERRIDE;
+  Status Scan(ColumnPredicate pred,
+              ColumnBlock *dst,
+              SelectionVector *sel,
+              bool& eval_complete) OVERRIDE;
 
   // Finish processing the current batch, advancing the iterators
   // such that the next call to PrepareBatch() will start where the previous
