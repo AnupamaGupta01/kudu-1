@@ -239,11 +239,6 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
   }
 }
 
-Status BinaryDictBlockDecoder::GetDictOrder() {
-  // Probably have to do some sorting of the codewords here
-  // Maybe store the ordering in yet another separate block?  
-}
-
 Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnPredicate& pred,
                                                  SelectionVector *sel,
                                                  bool& eval_complete) {
@@ -259,19 +254,22 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnPredicate& pred,
       return Status::OK();
     }
     case PredicateType::Equality: {
+      Slice lower(static_cast<const char*>(pred.raw_lower()));
       // assuming mode_ is kCodeWordMode for now
       // scan the dict_decoder for the index of the word
       bool exact = false;
       // Status s = dict_decoder_->SeekAtOrAfterValue(pred.raw_lower(), &exact);
       // pred_codewords stores the codewords that satisfy the predicate
       std::unordered_set<uint32_t> pred_codewords;
-      for (int i = 0; i < dict_decoder_->Count(); i++) {
+      for (uint32_t i = 0; i < dict_decoder_->Count(); i++) {
         // Scan through the rows in the decoder and determine which satisfy the predicate
-        int c = dict_decoder_->string_at_index[i].compare(pred.raw_lower());
+        Slice cur_string = dict_decoder_->string_at_index(i);
+
+        int c = cur_string.compare(lower);
         // TODO: here we could check the lower and upper and determine the proper c pattern 
         // Store the codewords that satisfy the predicate to some storage
         if (c == 0) {
-          pred_codewords.push_back(i);
+          pred_codewords.insert(i);
         }
       }
 
@@ -281,8 +279,11 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnPredicate& pred,
       }
 
       size_t nrows = data_decoder_->Count();
-      data_decoder_->SeekToPositionInBlock(0);
-      data_decoder_->CopyNextValuesToArray(nrows, data);
+      
+      BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
+      d_bptr->SeekToPositionInBlock(0);
+      d_bptr->CopyNextValuesToArray(&nrows, codeword_buf_.data());
+      
       codeword_buf_.resize(nrows*sizeof(uint32_t));
       
       // iterate through the data and check if the which satisfy the predicate

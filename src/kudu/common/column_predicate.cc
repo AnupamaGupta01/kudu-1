@@ -243,10 +243,6 @@ void ApplyPredicate(const ColumnBlock& block, SelectionVector* sel, P p) {
 }
 } // anonymous namespace
 
-void ColumnPredicate::EvaluateBlock(const ColumnBlock& block, SelectionVector *sel, BlockDecoder& dblk) const {
-  
-}
-
 void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) const {
   CHECK_NOTNULL(sel);
 

@@ -144,9 +144,9 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
   static const size_t kMinHeaderSize = sizeof(uint32_t) * 1;
 
-  Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnPredicate& pred,
-                                                 SelectionVector *sel,
-                                                 bool& eval_complete);
+  Status EvaluatePredicate(ColumnPredicate& pred,
+                           SelectionVector *sel,
+                           bool& eval_complete) OVERRIDE;
 
 
  private:

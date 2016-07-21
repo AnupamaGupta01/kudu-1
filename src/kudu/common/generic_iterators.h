@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "kudu/common/column_predicate.h"
 #include "kudu/common/iterator.h"
 #include "kudu/common/scan_spec.h"
 #include "kudu/util/object_pool.h"
@@ -164,6 +165,8 @@ class MaterializingIterator : public RowwiseIterator {
   FRIEND_TEST(TestPredicateEvaluatingIterator, TestPredicateEvaluation);
 
   Status MaterializeBlock(RowBlock *dst);
+
+  Status EvalAndMaterializeBlock(RowBlock *dst);
 
   std::shared_ptr<ColumnwiseIterator> iter_;
 

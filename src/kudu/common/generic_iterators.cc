@@ -498,7 +498,7 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
 
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
-  RETURN_NOT_OK(MaterializeBlock(dst));
+  RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
   return Status::OK();

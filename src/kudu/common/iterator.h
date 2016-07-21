@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "kudu/common/column_predicate.h"
 #include "kudu/common/columnblock.h"
 #include "kudu/common/rowblock.h"
 #include "kudu/common/schema.h"
@@ -98,6 +99,14 @@ class ColumnwiseIterator : public virtual IteratorBase {
   // Any indirect data (eg strings) are copied into the destination block's
   // arena, if non-null.
   virtual Status MaterializeColumn(size_t col_idx, ColumnBlock *dst) = 0;
+  virtual Status EvalAndMaterializeColumn(size_t col_idx,
+                                          ColumnPredicate pred,
+                                          ColumnBlock *dst,
+                                          SelectionVector *sel,
+                                          bool& eval_complete) {
+    eval_complete = false;
+    return MaterializeColumn(col_idx, dst);
+  }
 
   // Finish the current batch.
   virtual Status FinishBatch() = 0;

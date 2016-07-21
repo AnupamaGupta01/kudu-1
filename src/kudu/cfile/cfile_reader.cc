@@ -901,14 +901,14 @@ Status CFileIterator::FinishBatch() {
   return Status::OK();
 }
 
-std::vector<PreparedBlock> CFileIterator::GetBlocks(bool& is_nullable) {
-  // Rather than going through this Scan()
-  // 
-  // TODO: all the checks in Scan
-  CHECK(seeked_) << "not seeked";
-  is_nullable = reader_->is_nullable();
-  return &prepared_blocks_;
-}
+// std::vector<PreparedBlock> CFileIterator::GetBlocks(bool& is_nullable) {
+//   // Rather than going through this Scan()
+//   // 
+//   // TODO: all the checks in Scan
+//   CHECK(seeked_) << "not seeked";
+//   is_nullable = reader_->is_nullable();
+//   return &prepared_blocks_;
+// }
 
 Status CFileIterator::Scan(ColumnBlock *dst) {
 // Status CFileIterator::Scan(ColumnPredicate pred,

@@ -23,6 +23,8 @@
 #include <glog/logging.h>
 
 #include "kudu/common/rowid.h"
+#include "kudu/common/rowblock.h"
+#include "kudu/common/column_predicate.h"
 #include "kudu/cfile/cfile.pb.h"
 #include "kudu/gutil/macros.h"
 #include "kudu/util/faststring.h"
@@ -131,9 +133,13 @@ class BlockDecoder {
   // allocated in the dst block's arena.
   virtual Status CopyNextValues(size_t *n, ColumnDataView *dst) = 0;
 
+  //
   virtual Status EvaluatePredicate(ColumnPredicate& pred,
-                                   SelectionVector *sel,
-                                   bool& eval_complete) = 0;
+                           SelectionVector *sel,
+                           bool& eval_complete) {
+    eval_complete = false;
+    return Status::OK();
+  }
 
   // Return true if there are more values remaining to be iterated.
   // (i.e that the next call to CopyNextValues will return at least 1
