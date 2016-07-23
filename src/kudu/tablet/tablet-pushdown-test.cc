@@ -8,7 +8,7 @@
 //
 //   http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing,
+// Unless r ired by applicable law or agreed to in writing,
 // software distributed under the License is distributed on an
 // "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 // KIND, either express or implied.  See the License for the
@@ -44,7 +44,8 @@ class TabletPushdownTest : public KuduTabletTest,
   TabletPushdownTest()
     : KuduTabletTest(Schema({ ColumnSchema("key", INT32),
                               ColumnSchema("int_val", INT32),
-                              ColumnSchema("string_val", STRING) }, 1)) {
+                              ColumnSchema("string_val", STRING, false, NULL,NULL,
+                                           ColumnStorageAttributes(DICT_ENCODING, DEFAULT_COMPRESSION)) }, 1)) {
   }
 
   virtual void SetUp() OVERRIDE {
@@ -56,7 +57,8 @@ class TabletPushdownTest : public KuduTabletTest,
   void FillTestTablet() {
     RowBuilder rb(client_schema_);
 
-    nrows_ = 2100;
+    // nrows_ = 2100;
+    nrows_ = 1000000;
     if (AllowSlowTests()) {
       nrows_ = 100000;
     }
@@ -66,7 +68,7 @@ class TabletPushdownTest : public KuduTabletTest,
     for (int64_t i = 0; i < nrows_; i++) {
       CHECK_OK(row.SetInt32(0, i));
       CHECK_OK(row.SetInt32(1, i * 10));
-      CHECK_OK(row.SetStringCopy(2, StringPrintf("%08" PRId64, i)));
+      CHECK_OK(row.SetStringCopy(2, StringPrintf("%08" PRId64, i%300)));
       ASSERT_OK_FAST(writer.Insert(row));
 
       if (i == 205 && GetParam() == SPLIT_MEMORY_DISK) {
@@ -84,6 +86,7 @@ class TabletPushdownTest : public KuduTabletTest,
   // expected rows are returned.
   void TestScanYieldsExpectedResults(ScanSpec spec) {
     Arena arena(128, 1028);
+    // Arena arena(128, 5000000);
     AutoReleasePool pool;
     spec.OptimizeScan(schema_, &arena, &pool, true);
 
@@ -91,7 +94,6 @@ class TabletPushdownTest : public KuduTabletTest,
     ASSERT_OK(tablet()->NewRowIterator(client_schema_, &iter));
     ASSERT_OK(iter->Init(&spec));
     ASSERT_TRUE(spec.predicates().empty()) << "Should have accepted all predicates";
-
     vector<string> results;
     LOG_TIMING(INFO, "Filtering by int value") {
       ASSERT_OK(IterateToStringList(iter.get(), &results));
@@ -105,7 +107,6 @@ class TabletPushdownTest : public KuduTabletTest,
               results[0]);
     ASSERT_EQ("(int32 key=210, int32 int_val=2100, string string_val=00000210)",
               results[10]);
-
     int expected_blocks_from_disk;
     int expected_rows_from_disk;
     bool check_stats = true;
@@ -171,6 +172,7 @@ class TabletPushdownTest : public KuduTabletTest,
   uint64_t nrows_;
 };
 
+// These tests only test the key ranges
 TEST_P(TabletPushdownTest, TestPushdownIntKeyRange) {
   ScanSpec spec;
   int32_t lower = 200;
@@ -201,8 +203,26 @@ TEST_P(TabletPushdownTest, TestPushdownIntValueRange) {
   // were not read.
 }
 
-INSTANTIATE_TEST_CASE_P(AllMemory, TabletPushdownTest, ::testing::Values(ALL_IN_MEMORY));
-INSTANTIATE_TEST_CASE_P(SplitMemoryDisk, TabletPushdownTest, ::testing::Values(SPLIT_MEMORY_DISK));
+// @andrwng
+TEST_P(TabletPushdownTest, TestPushdownNonKeyEquality) {
+  ScanSpec spec;
+  Slice lower("00000200", 8);
+  Slice upper("00000211", 8);
+  if (AllowSlowTests()) {
+    std::cerr << "Pushdown test is running slow\n";
+  }
+  else {
+    std::cerr << "Pushdown test is not slow\n";
+  }
+  auto pred2 = ColumnPredicate::Range(schema_.column(2), &lower, &upper);
+  spec.AddPredicate(pred2);
+
+  TestScanYieldsExpectedResults(spec);
+  // TestCountOnlyScanYieldsExpectedResults(spec);
+}
+
+// INSTANTIATE_TEST_CASE_P(AllMemory, TabletPushdownTest, ::testing::Values(ALL_IN_MEMORY));
+// INSTANTIATE_TEST_CASE_P(SplitMemoryDisk, TabletPushdownTest, ::testing::Values(SPLIT_MEMORY_DISK));
 INSTANTIATE_TEST_CASE_P(AllDisk, TabletPushdownTest, ::testing::Values(ALL_ON_DISK));
 
 } // namespace tablet

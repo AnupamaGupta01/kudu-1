@@ -239,67 +239,101 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
   }
 }
 
+static bool CompareRange(Slice& str, Slice& lower, Slice& upper) {
+  // will return true only if str is between upper and lower
+  if (lower.compare(upper) == 0) {
+    // this is an equality predicate
+    return str.compare(lower) == 0;
+  }
+  if (upper.empty()) {
+    // this is a lower bound
+    return str.compare(lower) >= 0;
+  }
+  else if (lower.empty()) {
+    // this is an upper bound
+    return str.compare(upper) < 0;
+  }
+  else {
+    // both bounds exist, get stuff between them
+    return str.compare(upper) < 0 && str.compare(lower) >= 0;
+  }
+}
+
 Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnPredicate& pred,
                                                  SelectionVector *sel,
+                                                 size_t& offset,
                                                  bool& eval_complete) {
   // start empty and scan for the correct values
-  sel->SetAllFalse();
+  // offset is the offset in the selectionvector that we're currently looking at, since there will be
+  //  multiple blocks
+  // sel->SetAllFalse();  // SetAllFalse should be called before looping through all these blocks
+  //   This should not happen per EvaluatePredicate call since there may be multiple bocks per batch
+  std::unordered_set<uint32_t> pred_codewords;
+  Slice lower, upper;
+  if (pred.raw_lower() != nullptr) {
+    lower = Slice(static_cast<const char*>(pred.raw_lower()));
+  }
+  else {
+    lower = Slice();
+  }
+  if (pred.raw_upper() != nullptr) {
+    upper = Slice(static_cast<const char*>(pred.raw_upper()));
+  }
+  else {
+    upper = Slice();
+  }
+
   switch (pred.predicate_type()) {
     case PredicateType::None: {
       eval_complete = true;
       return Status::OK();
     }
     case PredicateType::Range: {
-      eval_complete = false;
-      return Status::OK();
+      eval_complete = true;
+      break;
     }
     case PredicateType::Equality: {
-      Slice lower(static_cast<const char*>(pred.raw_lower()));
-      // assuming mode_ is kCodeWordMode for now
-      // scan the dict_decoder for the index of the word
-      bool exact = false;
-      // Status s = dict_decoder_->SeekAtOrAfterValue(pred.raw_lower(), &exact);
-      // pred_codewords stores the codewords that satisfy the predicate
-      std::unordered_set<uint32_t> pred_codewords;
-      for (uint32_t i = 0; i < dict_decoder_->Count(); i++) {
-        // Scan through the rows in the decoder and determine which satisfy the predicate
-        Slice cur_string = dict_decoder_->string_at_index(i);
-
-        int c = cur_string.compare(lower);
-        // TODO: here we could check the lower and upper and determine the proper c pattern 
-        // Store the codewords that satisfy the predicate to some storage
-        if (c == 0) {
-          pred_codewords.insert(i);
-        }
-      }
-
-      if (pred_codewords.empty()) {
-        eval_complete = true;
-        return Status::OK(); 
-      }
-
-      size_t nrows = data_decoder_->Count();
-      
-      BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
-      d_bptr->SeekToPositionInBlock(0);
-      d_bptr->CopyNextValuesToArray(&nrows, codeword_buf_.data());
-      
-      codeword_buf_.resize(nrows*sizeof(uint32_t));
-      
-      // iterate through the data and check if the which satisfy the predicate
-      for (int i = 0; i < nrows; i++) {
-        uint32_t codeword = *reinterpret_cast<uint32_t*>(&codeword_buf_[i*sizeof(uint32_t)]);
-        if (pred_codewords.find(codeword) == pred_codewords.end()) {
-          BitmapSet(sel->mutable_bitmap(), i);
-        }
-      }
+      eval_complete = true;
+      upper = lower;
+      break;
     }
     case PredicateType::IsNotNull: {
       eval_complete = false;
       return Status::OK();
     }
-
   }
+  if (pred_codewords.empty()) {
+    eval_complete = true;
+    return Status::OK(); 
+  }
+
+  for (uint32_t i = 0; i < dict_decoder_->Count(); i++) {
+    // Scan through the rows in the decoder and determine which satisfy the predicate
+    Slice cur_string = dict_decoder_->string_at_index(i);
+
+    // Store the codewords that satisfy the predicate to some storage
+    if (CompareRange(cur_string, lower, upper)) {
+      pred_codewords.insert(i);
+    }
+  }
+
+  size_t nrows = data_decoder_->Count();
+  
+  BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
+  d_bptr->SeekToPositionInBlock(0);
+  d_bptr->CopyNextValuesToArray(&nrows, codeword_buf_.data());
+  
+  codeword_buf_.resize(nrows*sizeof(uint32_t));
+  
+  // iterate through the data and check if the which satisfy the predicate
+  for (size_t i = 0; i < nrows; i++) {
+    uint32_t codeword = *reinterpret_cast<uint32_t*>(&codeword_buf_[i*sizeof(uint32_t)]);
+    if (pred_codewords.find(codeword) == pred_codewords.end()) {
+      BitmapSet(sel->mutable_bitmap(), offset+i);
+    }
+  }
+  offset += nrows;
+  return Status::OK();
 }
 
 Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* dst) {

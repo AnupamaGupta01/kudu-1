@@ -1014,6 +1014,9 @@ Status CFileIterator::Scan(ColumnPredicate pred,
   uint32_t rem = last_prepare_count_;
   DCHECK_LE(rem, dst->nrows());
 
+  // Start with the SelectionVector completely empty and work up from there
+  sel->SetAllFalse();
+  size_t offset = 0;
   for (PreparedBlock *pb : prepared_blocks_) {
     if (pb->needs_rewind_) {
       // Seek back to the saved position.
@@ -1088,7 +1091,7 @@ Status CFileIterator::Scan(ColumnPredicate pred,
       break;
     }
 
-    pb->dblk_->EvaluatePredicate(pred, sel, eval_complete);
+    pb->dblk_->EvaluatePredicate(pred, sel, offset, eval_complete);
   }
 
   DCHECK_EQ(rem, 0) << "Should have fetched exactly the number of prepared rows";

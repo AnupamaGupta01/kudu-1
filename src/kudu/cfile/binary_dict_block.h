@@ -124,6 +124,7 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   virtual Status ParseHeader() OVERRIDE;
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
   virtual Status SeekAtOrAfterValue(const void* value, bool* exact_match) OVERRIDE;
+  Status SeekToWord(const void* word, bool* exact_match);
   Status CopyNextValues(size_t* n, ColumnDataView* dst) OVERRIDE;
 
   virtual bool HasNext() const OVERRIDE {
@@ -146,6 +147,7 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
   Status EvaluatePredicate(ColumnPredicate& pred,
                            SelectionVector *sel,
+                           size_t& offset,
                            bool& eval_complete) OVERRIDE;
 
 

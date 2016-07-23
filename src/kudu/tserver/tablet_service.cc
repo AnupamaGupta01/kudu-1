@@ -1004,7 +1004,6 @@ void TabletServiceImpl::ScannerKeepAlive(const ScannerKeepAliveRequestPB *req,
   context->RespondSuccess();
 }
 
-
 void TabletServiceImpl::Scan(const ScanRequestPB* req,
                              ScanResponsePB* resp,
                              rpc::RpcContext* context) {

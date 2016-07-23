@@ -462,6 +462,8 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
 
   RETURN_NOT_OK(PrepareColumn(col_idx));
   ColumnIterator* iter = col_iters_[col_idx];
+
+  // implemented in cfile_reader.cc
   return iter->Scan(pred, dst, sel, eval_complete);
   // alternatively, iter->GetDecoders() to get to the decoders and then call the dblk->EvaluatePredicate
   // iter->GetDecoders(rle_decoder, std::vector<dblk>)

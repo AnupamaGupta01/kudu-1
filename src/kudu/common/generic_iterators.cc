@@ -20,6 +20,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <iostream>
 
 #include "kudu/common/generic_iterators.h"
 #include "kudu/common/row.h"
@@ -30,6 +31,7 @@
 #include "kudu/util/flag_tags.h"
 #include "kudu/util/memory/arena.h"
 
+using std::cerr;
 using std::all_of;
 using std::get;
 using std::move;
@@ -498,14 +500,15 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
 
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
+  cerr << "MATAMATAMATAMATAMATERIALIZING\n";
   RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
+  // RETURN_NOT_OK(MaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
   return Status::OK();
 }
 
 Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
-
   // Materialize the column and call EvalAndScan, which should scan the data with the decoder, 
   // and return with the data filled out, but the evaluation should not have to depend on the
   // materialized data
@@ -516,6 +519,8 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     // Materialize the column with the decoder's Evaluate function
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     bool eval_complete = false;
+
+    // implemented in cfile_set.cc
     RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(get<0>(col_pred),
                                                   get<1>(col_pred),
                                                   &dst_col,

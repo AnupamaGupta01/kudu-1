@@ -136,6 +136,7 @@ class BlockDecoder {
   //
   virtual Status EvaluatePredicate(ColumnPredicate& pred,
                            SelectionVector *sel,
+                           size_t& offset,
                            bool& eval_complete) {
     eval_complete = false;
     return Status::OK();
