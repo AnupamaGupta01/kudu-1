@@ -452,11 +452,11 @@ Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
 }
 
 Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
-                                                  ColumnPredicate pred,
+                                                  const ColumnPredicate& pred,
                                                   ColumnBlock *dst,
                                                   SelectionVector *sel,
                                                   bool& eval_complete) {
-  // Alternatively, make this a call to GetDecoders or something
+  // Alternatively, make this a call to GetDecoders or something and then evaluate 
   CHECK_EQ(prepared_count_, dst->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 

@@ -139,6 +139,45 @@ class KuduRowSetTest : public KuduTabletTest {
   std::shared_ptr<RowSetMetadata> rowset_meta_;
 };
 
+// this should iterate through the values and not buffer them at the end
+// this is purely a measure of decoding and evaluating predicates
+static inline Status SilentIterateToStringList(RowwiseIterator *iter,
+                                               int limit = INT_MAX) {
+  Schema schema = iter->schema();
+  Arena arena(1024, 1024);
+  RowBlock block(schema, 100, &arena);
+  int fetched = 0;
+  while (iter->HasNext() && fetched < limit) {
+    RETURN_NOT_OK(iter->NextBlock(&block));
+    for (size_t i = 0; i < block.nrows() && fetched < limit; i++) {
+      if (block.selection_vector()->IsRowSelected(i)) {
+        fetched++;
+      }
+    }
+  }
+  std::cerr << "Number selected: " << fetched << std::endl;
+  return Status::OK();
+}
+// this should iterate through the values and not buffer them at the end
+// this should use the EvalAndMaterializeBlock
+static inline Status PredPushedSilentIterateToStringList(RowwiseIterator *iter,
+                                                         int limit = INT_MAX) {
+  Schema schema = iter->schema();
+  Arena arena(1024, 1024);
+  RowBlock block(schema, 100, &arena);
+  int fetched = 0;
+  while (iter->HasNext() && fetched < limit) {
+    RETURN_NOT_OK(iter->PredPushedNextBlock(&block));
+    for (size_t i = 0; i < block.nrows() && fetched < limit; i++) {
+      if (block.selection_vector()->IsRowSelected(i)) {
+        fetched++;
+      }
+    }
+  }
+  std::cerr << "Number selected: " << fetched << std::endl;
+  return Status::OK();
+}
+
 static inline Status IterateToStringList(RowwiseIterator *iter,
                                          vector<string> *out,
                                          int limit = INT_MAX) {

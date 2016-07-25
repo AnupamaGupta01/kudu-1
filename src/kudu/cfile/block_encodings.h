@@ -134,7 +134,7 @@ class BlockDecoder {
   virtual Status CopyNextValues(size_t *n, ColumnDataView *dst) = 0;
 
   //
-  virtual Status EvaluatePredicate(ColumnPredicate& pred,
+  virtual Status EvaluatePredicate(const ColumnPredicate& pred,
                            SelectionVector *sel,
                            size_t& offset,
                            bool& eval_complete) {

@@ -145,7 +145,7 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
   static const size_t kMinHeaderSize = sizeof(uint32_t) * 1;
 
-  Status EvaluatePredicate(ColumnPredicate& pred,
+  Status EvaluatePredicate(const ColumnPredicate& pred,
                            SelectionVector *sel,
                            size_t& offset,
                            bool& eval_complete) OVERRIDE;
@@ -165,6 +165,8 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   // codeword_order_[i] > codeword_order_[j] implies the codeword[i] > codeword[j]
   // may need to do some sorting or access an extra block to get the ordering
   // std::vector<uint32_t> codeword_order_;
+  std::unordered_set<uint32_t, GoodFastHash<StringPiece> > dictionary_;
+
 
   DictEncodingMode mode_;
 

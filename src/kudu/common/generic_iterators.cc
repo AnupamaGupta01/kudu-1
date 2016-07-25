@@ -500,9 +500,21 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
 
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
-  cerr << "MATAMATAMATAMATAMATERIALIZING\n";
+  RETURN_NOT_OK(MaterializeBlock(dst));
+  RETURN_NOT_OK(iter_->FinishBatch());
+
+  return Status::OK();
+}
+
+Status MaterializingIterator::PredPushedNextBlock(RowBlock* dst) {
+  size_t n = dst->row_capacity();
+  if (dst->arena()) {
+    dst->arena()->Reset();
+  }
+
+  RETURN_NOT_OK(iter_->PrepareBatch(&n));
+  dst->Resize(n);
   RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
-  // RETURN_NOT_OK(MaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
   return Status::OK();
@@ -521,12 +533,16 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     bool eval_complete = false;
 
     // implemented in cfile_set.cc
+    // Call Scan on the iterator such that dst_col gets populated with all the data for the column
+    // and selection_vector is filled out appropriately. If this cannot be done by the iterator, 
+    // eval_complete should be set to false, and Evaluate will be called on the data.
     RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(get<0>(col_pred),
                                                   get<1>(col_pred),
                                                   &dst_col,
                                                   dst->selection_vector(),
                                                   eval_complete));
     if (!eval_complete) {
+      std:;cerr << "Incomplete evlauation\n";
       get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
     }
     if (!dst->selection_vector()->AnySelected()) {

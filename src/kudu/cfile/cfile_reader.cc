@@ -503,10 +503,10 @@ Status DefaultColumnValueIterator::Scan(ColumnBlock *dst)  {
   return Status::OK();
 }
 
-Status DefaultColumnValueIterator::Scan(ColumnPredicate pred,
-            ColumnBlock *dst,
-            SelectionVector *sel,
-            bool& eval_complete) {
+Status DefaultColumnValueIterator::Scan(const ColumnPredicate& pred,
+                                        ColumnBlock *dst,
+                                        SelectionVector *sel,
+                                        bool& eval_complete) {
   // TODO: fill this out
   return Scan(dst);
 }
@@ -1002,7 +1002,7 @@ Status CFileIterator::Scan(ColumnBlock *dst) {
   return Status::OK();
 }
 
-Status CFileIterator::Scan(ColumnPredicate pred,
+Status CFileIterator::Scan(const ColumnPredicate& pred,
                            ColumnBlock *dst,
                            SelectionVector *sel,
                            bool& eval_complete) {
@@ -1069,6 +1069,8 @@ Status CFileIterator::Scan(ColumnPredicate pred,
       // Fetch as many as we can from the current datablock.
       size_t this_batch = rem;
       RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
+      
+      // Change the behavior of CopyNextValues to also evaluate along the way
       pb->needs_rewind_ = true;
       DCHECK_LE(this_batch, rem);
 
@@ -1090,6 +1092,7 @@ Status CFileIterator::Scan(ColumnPredicate pred,
     } else {
       break;
     }
+
 
     pb->dblk_->EvaluatePredicate(pred, sel, offset, eval_complete);
   }
