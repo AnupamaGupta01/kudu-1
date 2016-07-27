@@ -918,7 +918,7 @@ Status CFileIterator::Scan(ColumnBlock *dst) {
 //                            SelectionVector *sel,
 //                            bool& eval_complete) {
   CHECK(seeked_) << "not seeked";
-  LOG(INFO) << "Scan called from CFileIterator";
+  // LOG(INFO) << "Scan called from CFileIterator";
 
   // Use a column data view to been able to advance it as we read into it.
   ColumnDataView remaining_dst(dst);
@@ -1010,7 +1010,7 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
                            SelectionVector *sel,
                            bool& eval_complete) {
   CHECK(seeked_) << "not seeked";
-  LOG(INFO) << "Pushed Scan called from CFileIterator";
+  // LOG(INFO) << "Pushed Scan called from CFileIterator";
 
   // Use a column data view to been able to advance it as we read into it.
   ColumnDataView remaining_dst(dst);
@@ -1019,7 +1019,7 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
   DCHECK_LE(rem, dst->nrows());
 
   // Start with the SelectionVector completely empty and work up from there
-  // sel->SetAllFalse();
+  sel->SetAllFalse();
   // sel->SetAllTrue();
   // return Status::OK();
   size_t offset = 0;

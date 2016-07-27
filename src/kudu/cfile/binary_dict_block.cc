@@ -240,7 +240,7 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
 }
 
 static bool CompareRange(Slice& str, Slice& lower, Slice& upper) {
-  LOG(INFO) << " " << str << " " << lower.data() << " " << upper.data();
+  // LOG(INFO) << " " << str << " " << lower.data() << " " << upper.data();
   // will return true only if str is between [lower, upper)
   if (lower.compare(upper) == 0) {
     // this is an equality predicate
@@ -272,11 +272,11 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
   // sel->SetAllFalse();  // SetAllFalse should be called before looping through all these blocks
   //   This should not happen per EvaluatePredicate call since there may be multiple bocks per batch
   
-  std::unordered_set<uint32_t> pred_codewords;
-  const Slice* lower_ptr, upper_ptr;
+  std::set<uint32_t> pred_codewords;
+  // std::unordered_set<uint32_t, std::hash<uint32_t>> pred_codewords;
   Slice lower, upper;
-  LOG(INFO) << *reinterpret_cast<const Slice*>(pred.raw_lower());
-  LOG(INFO) << *reinterpret_cast<const Slice*>(pred.raw_upper());
+  // LOG(INFO) << *reinterpret_cast<const Slice*>(pred.raw_lower());
+  // LOG(INFO) << *reinterpret_cast<const Slice*>(pred.raw_upper());
   // Set up the upper and lower bound slices, empty bound is set to empty Slice()
   if (pred.raw_lower() != nullptr) {
     lower = *reinterpret_cast<const Slice*>(pred.raw_lower());
@@ -312,7 +312,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
     }
   }
   size_t nwords = dict_decoder_->Count();
-  LOG(INFO) << "EvaluatePredicate called from BinaryDictBlockDecoder with " << n << " rows at " << offset << ", checking " << nwords << " words.";
+  // LOG(INFO) << "EvaluatePredicate called from BinaryDictBlockDecoder with " << n << " rows at " << offset << ", checking " << nwords << " words.";
   // O(d*l)
   // Scan through the entries in the dictionary and determine which satisfy the predicate
   for (size_t i = 0; i < nwords; i++) {  
@@ -320,11 +320,11 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
 
     // Store the codewords that satisfy the predicate to some storage (set, unordered_set, etc.)
     if (CompareRange(cur_string, lower, upper)) {
-      LOG(INFO) << cur_string << " matches the predicate";
+      // LOG(INFO) << cur_string << " matches the predicate";
       pred_codewords.insert(i);
     }
     else {
-      LOG(INFO) << cur_string << " does not match the predicate";
+      // LOG(INFO) << cur_string << " does not match the predicate";
     }
   }
   if (pred_codewords.empty()) {
@@ -332,7 +332,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
     return Status::OK(); 
   }
 
-  size_t nrows = data_decoder_->Count();
   BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
   // d_bptr->SeekToPositionInBlock(0);
   // Copy the words of the data block into a buffer so that we can easily access the UINT32s
@@ -361,9 +360,9 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
     if (pred_codewords.find(codeword) != end) {
       BitmapSet(sel->mutable_bitmap(), offset+i);
     }
-    else {
-      BitmapClear(sel->mutable_bitmap(), offset+i);
-    }
+    // else {
+    //   BitmapClear(sel->mutable_bitmap(), offset+i);
+    // }
   }
   offset += n;
   return Status::OK();
@@ -371,7 +370,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
 
 // Overall process is O(n) where n is the number of strings to decode
 Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* dst) {
-  LOG(INFO) << "CopyNextDecodeStrings called";
+  // LOG(INFO) << "CopyNextDecodeStrings called";
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);
   DCHECK_LE(*n, dst->nrows());
@@ -397,7 +396,7 @@ Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* 
 }
 
 Status BinaryDictBlockDecoder::CopyNextValues(size_t* n, ColumnDataView* dst) {
-  LOG(INFO) << "CopyNextValues called";
+  // LOG(INFO) << "CopyNextValues called";
   if (mode_ == kCodeWordMode) {
     return CopyNextDecodeStrings(n, dst);
   } else {

@@ -444,7 +444,7 @@ Status CFileSet::Iterator::InitializeSelectionVector(SelectionVector *sel_vec) {
 }
 
 Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
-  LOG(INFO) << "MaterializeColumn called";
+  // LOG(INFO) << "MaterializeColumn called";
   CHECK_EQ(prepared_count_, dst->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
@@ -459,7 +459,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
                                                   SelectionVector *sel,
                                                   bool& eval_complete) {
   // Alternatively, make this a call to GetDecoders or something and then evaluate 
-  LOG(INFO) << "EvalAndMaterializeColumn called from CFileSet::Iterator";
+  // LOG(INFO) << "EvalAndMaterializeColumn called from CFileSet::Iterator";
   CHECK_EQ(prepared_count_, dst->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 

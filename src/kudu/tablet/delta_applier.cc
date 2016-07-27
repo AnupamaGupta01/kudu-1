@@ -99,7 +99,7 @@ Status DeltaApplier::EvalAndMaterializeColumn(size_t col_idx,
                                 ColumnBlock *dst,
                                 SelectionVector *sel,
                                 bool& eval_complete) {
-  LOG(INFO) << "EvalAndMaterializeColumn called from DeltaApplier";
+  // LOG(INFO) << "EvalAndMaterializeColumn called from DeltaApplier";
   // eval_complete = false;
   return base_iter_->EvalAndMaterializeColumn(col_idx, pred, dst, sel, eval_complete);
   // TODO: apply the updates to the column and to the selection vector
