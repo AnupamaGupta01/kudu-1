@@ -139,8 +139,8 @@ class KuduRowSetTest : public KuduTabletTest {
   std::shared_ptr<RowSetMetadata> rowset_meta_;
 };
 
-// this should iterate through the values and not buffer them at the end
-// this is purely a measure of decoding and evaluating predicates
+// Iterate through the values without outputting them at the end
+// This is strictly a measure of decoding and evaluating predicates
 static inline Status SilentIterateToStringList(RowwiseIterator *iter,
                                                int limit = INT_MAX) {
   Schema schema = iter->schema();
@@ -155,13 +155,13 @@ static inline Status SilentIterateToStringList(RowwiseIterator *iter,
       }
     }
   }
-  std::cerr << "Number selected: " << fetched << std::endl;
+  std::cerr << "Number selected with original: " << fetched << std::endl;
   return Status::OK();
 }
-// this should iterate through the values and not buffer them at the end
-// this should use the EvalAndMaterializeBlock
-static inline Status PredPushedSilentIterateToStringList(RowwiseIterator *iter,
-                                                         int limit = INT_MAX) {
+// Iterate through the values without outputting them at the end
+// using the EvalAndMaterializeBlock function to push evaluation to the decoders
+static inline Status PushedIterateToStringList(RowwiseIterator *iter,
+                                               int limit = INT_MAX) {
   Schema schema = iter->schema();
   Arena arena(1024, 1024);
   RowBlock block(schema, 100, &arena);
@@ -174,7 +174,7 @@ static inline Status PredPushedSilentIterateToStringList(RowwiseIterator *iter,
       }
     }
   }
-  std::cerr << "Number selected: " << fetched << std::endl;
+  std::cerr << "Number selected with pushed: " << fetched << std::endl;
   return Status::OK();
 }
 

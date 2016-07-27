@@ -1566,6 +1566,7 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
   // If people had really large indirect objects, we would currently overshoot
   // their requested batch size by a lot.
   Arena arena(32 * 1024, 1 * 1024 * 1024);
+  // This also sets the number of rows to be scanned
   RowBlock block(scanner->iter()->schema(),
                  FLAGS_scanner_batch_size_rows, &arena);
 
@@ -1581,6 +1582,9 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
       SleepFor(MonoDelta::FromMilliseconds(FLAGS_scanner_inject_latency_on_each_batch_ms));
     }
 
+    // The call to NextBlock materializes the data into the block and fills out the block's selection vector
+    // iter itself has the data required to handle predicates
+    // For DiskRowSets, this is a UnionIterator(MaterializingIterator(DeltaApplier(CFileSetIterator, DeltaIterator))
     Status s = iter->NextBlock(&block);
     if (PREDICT_FALSE(!s.ok())) {
       LOG(WARNING) << "Copying rows from internal iterator for request " << req->ShortDebugString();

@@ -471,6 +471,9 @@ Status MemRowSet::Iterator::NextBlock(RowBlock *dst) {
 
   return Status::OK();
 }
+Status MemRowSet::Iterator::PredPushedNextBlock(RowBlock *dst) {
+  return NextBlock(dst);
+}
 
 Status MemRowSet::Iterator::FetchRows(RowBlock* dst, size_t* fetched) {
   *fetched = 0;

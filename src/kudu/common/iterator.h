@@ -78,9 +78,7 @@ class RowwiseIterator : public virtual IteratorBase {
   // at most its row_capacity. The iterator will attempt to have the maximum
   // number of rows in the batch, but may have less if it is near the end of data.
   virtual Status NextBlock(RowBlock *dst) = 0;
-  virtual Status PredPushedNextBlock(RowBlock* dst) {
-    return NextBlock(dst);
-  }
+  virtual Status PredPushedNextBlock(RowBlock* dst) = 0;
 
   // Get IteratorStats for each column in the row, including
   // (potentially) columns that are iterated over but not projected;
@@ -106,10 +104,7 @@ class ColumnwiseIterator : public virtual IteratorBase {
                                           const ColumnPredicate& pred,
                                           ColumnBlock *dst,
                                           SelectionVector *sel,
-                                          bool& eval_complete) {
-    eval_complete = false;
-    return MaterializeColumn(col_idx, dst);
-  }
+                                          bool& eval_complete) = 0;
 
   // Finish the current batch.
   virtual Status FinishBatch() = 0;

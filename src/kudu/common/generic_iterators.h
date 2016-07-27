@@ -58,6 +58,7 @@ class MergeIterator : public RowwiseIterator {
   virtual void GetIteratorStats(std::vector<IteratorStats>* stats) const OVERRIDE;
 
   virtual Status NextBlock(RowBlock* dst) OVERRIDE;
+  virtual Status PredPushedNextBlock(RowBlock *dst) OVERRIDE;
 
  private:
   void PrepareBatch(RowBlock* dst);
@@ -110,6 +111,7 @@ class UnionIterator : public RowwiseIterator {
   virtual void GetIteratorStats(std::vector<IteratorStats>* stats) const OVERRIDE;
 
   virtual Status NextBlock(RowBlock* dst) OVERRIDE;
+  virtual Status PredPushedNextBlock(RowBlock *dst) OVERRIDE;
 
  private:
   void PrepareBatch();
@@ -159,6 +161,7 @@ class MaterializingIterator : public RowwiseIterator {
   }
 
   virtual Status NextBlock(RowBlock* dst) OVERRIDE;
+  virtual Status PredPushedNextBlock(RowBlock* dst) OVERRIDE;
 
  private:
   FRIEND_TEST(TestMaterializingIterator, TestPredicatePushdown);
@@ -200,6 +203,7 @@ class PredicateEvaluatingIterator : public RowwiseIterator {
   Status Init(ScanSpec *spec) OVERRIDE;
 
   virtual Status NextBlock(RowBlock *dst) OVERRIDE;
+  virtual Status PredPushedNextBlock(RowBlock *dst) OVERRIDE;
 
   bool HasNext() const OVERRIDE;
 

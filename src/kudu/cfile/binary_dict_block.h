@@ -148,6 +148,8 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   Status EvaluatePredicate(const ColumnPredicate& pred,
                            SelectionVector *sel,
                            size_t& offset,
+                           size_t& n,
+                           ColumnDataView* dst,
                            bool& eval_complete) OVERRIDE;
 
 
@@ -165,7 +167,6 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   // codeword_order_[i] > codeword_order_[j] implies the codeword[i] > codeword[j]
   // may need to do some sorting or access an extra block to get the ordering
   // std::vector<uint32_t> codeword_order_;
-  std::unordered_set<uint32_t, GoodFastHash<StringPiece> > dictionary_;
 
 
   DictEncodingMode mode_;

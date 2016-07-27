@@ -616,6 +616,7 @@ class Tablet::Iterator : public RowwiseIterator {
   virtual bool HasNext() const OVERRIDE;
 
   virtual Status NextBlock(RowBlock *dst) OVERRIDE;
+  virtual Status PredPushedNextBlock(RowBlock *dst) OVERRIDE;
 
   std::string ToString() const OVERRIDE;
 

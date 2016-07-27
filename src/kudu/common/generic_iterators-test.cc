@@ -83,6 +83,7 @@ class VectorIterator : public ColumnwiseIterator {
                                   ColumnBlock *dst,
                                   SelectionVector *sel,
                                   bool& eval_complete) OVERRIDE {
+    LOG(INFO) << "EvalAndMaterializeColumn called from generic_iterators-test.cc";
     eval_complete = false;
     return MaterializeColumn(col_idx, dst);
   }

@@ -391,6 +391,7 @@ class MemRowSet::Iterator : public RowwiseIterator {
   Status SeekAtOrAfter(const Slice &key, bool *exact);
 
   virtual Status NextBlock(RowBlock *dst) OVERRIDE;
+  virtual Status PredPushedNextBlock(RowBlock *dst) OVERRIDE;
 
   bool has_upper_bound() const {
     return exclusive_upper_bound_.is_initialized();

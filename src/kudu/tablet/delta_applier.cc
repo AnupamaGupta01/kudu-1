@@ -23,6 +23,7 @@
 #include "kudu/common/iterator.h"
 #include "kudu/tablet/delta_store.h"
 #include "kudu/util/status.h"
+#include "kudu/util/logging.h"
 
 using std::shared_ptr;
 using std::string;
@@ -93,11 +94,27 @@ Status DeltaApplier::InitializeSelectionVector(SelectionVector *sel_vec) {
   return delta_iter_->ApplyDeletes(sel_vec);
 }
 
+Status DeltaApplier::EvalAndMaterializeColumn(size_t col_idx,
+                                const ColumnPredicate& pred,
+                                ColumnBlock *dst,
+                                SelectionVector *sel,
+                                bool& eval_complete) {
+  LOG(INFO) << "EvalAndMaterializeColumn called from DeltaApplier";
+  // eval_complete = false;
+  return base_iter_->EvalAndMaterializeColumn(col_idx, pred, dst, sel, eval_complete);
+  // TODO: apply the updates to the column and to the selection vector
+
+  
+  // return MaterializeColumn(col_idx, dst);
+}
+
 Status DeltaApplier::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
   DCHECK(!first_prepare_) << "PrepareBatch() must be called at least once";
 
   // Copy the base data.
   RETURN_NOT_OK(base_iter_->MaterializeColumn(col_idx, dst));
+  // EvalAndMaterialize
+  // Deltas can be applied to selectionvector
 
   // Apply all the updates for this column.
   RETURN_NOT_OK(delta_iter_->ApplyUpdates(col_idx, dst));

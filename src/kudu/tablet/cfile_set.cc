@@ -30,6 +30,7 @@
 #include "kudu/tablet/diskrowset.h"
 #include "kudu/tablet/cfile_set.h"
 #include "kudu/util/flag_tags.h"
+#include "kudu/util/logging.h"
 
 DEFINE_bool(consult_bloom_filters, true, "Whether to consult bloom filters on row presence checks");
 TAG_FLAG(consult_bloom_filters, hidden);
@@ -443,6 +444,7 @@ Status CFileSet::Iterator::InitializeSelectionVector(SelectionVector *sel_vec) {
 }
 
 Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
+  LOG(INFO) << "MaterializeColumn called";
   CHECK_EQ(prepared_count_, dst->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
@@ -457,6 +459,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
                                                   SelectionVector *sel,
                                                   bool& eval_complete) {
   // Alternatively, make this a call to GetDecoders or something and then evaluate 
+  LOG(INFO) << "EvalAndMaterializeColumn called from CFileSet::Iterator";
   CHECK_EQ(prepared_count_, dst->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
@@ -464,6 +467,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
   ColumnIterator* iter = col_iters_[col_idx];
 
   // implemented in cfile_reader.cc
+  // return iter->Scan(dst);
   return iter->Scan(pred, dst, sel, eval_complete);
   // alternatively, iter->GetDecoders() to get to the decoders and then call the dblk->EvaluatePredicate
   // iter->GetDecoders(rle_decoder, std::vector<dblk>)

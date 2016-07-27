@@ -137,6 +137,8 @@ class BlockDecoder {
   virtual Status EvaluatePredicate(const ColumnPredicate& pred,
                            SelectionVector *sel,
                            size_t& offset,
+                           size_t& n,
+                           ColumnDataView* dst,
                            bool& eval_complete) {
     eval_complete = false;
     return Status::OK();

@@ -1873,6 +1873,10 @@ Status Tablet::Iterator::NextBlock(RowBlock *dst) {
   return iter_->NextBlock(dst);
 }
 
+Status Tablet::Iterator::PredPushedNextBlock(RowBlock *dst) {
+  return iter_->PredPushedNextBlock(dst);
+}
+
 string Tablet::Iterator::ToString() const {
   string s;
   s.append("tablet iterator: ");

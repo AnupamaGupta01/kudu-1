@@ -30,6 +30,7 @@
 #include "kudu/gutil/strings/substitute.h"
 #include "kudu/util/flag_tags.h"
 #include "kudu/util/memory/arena.h"
+#include "kudu/util/logging.h"
 
 using std::cerr;
 using std::all_of;
@@ -54,7 +55,10 @@ namespace kudu {
 
 // TODO: size by bytes, not # rows
 static const int kMergeRowBuffer = 1000;
-
+// @andrwng
+static string LogPrefix() {
+  return strings::Substitute("T $0 ", "generic_iterators");
+}
 // MergeIterState wraps a RowwiseIterator for use by the MergeIterator.
 // Importantly, it also filters out unselected rows from the wrapped RowwiseIterator,
 // such that all returned rows are valid.
@@ -210,6 +214,16 @@ Status MergeIterator::InitSubIterators(ScanSpec *spec) {
 }
 
 Status MergeIterator::NextBlock(RowBlock* dst) {
+  CHECK(initted_);
+  DCHECK_SCHEMA_EQ(dst->schema(), schema());
+
+  PrepareBatch(dst);
+  RETURN_NOT_OK(MaterializeBlock(dst));
+
+  return Status::OK();
+}
+
+Status MergeIterator::PredPushedNextBlock(RowBlock* dst) {
   CHECK(initted_);
   DCHECK_SCHEMA_EQ(dst->schema(), schema());
 
@@ -379,6 +393,16 @@ Status UnionIterator::NextBlock(RowBlock* dst) {
   return Status::OK();
 }
 
+Status UnionIterator::PredPushedNextBlock(RowBlock* dst) {
+  // LOG_WITH_PREFIX(INFO) << "PredPushedNextBlock() called from UnionIterator";
+
+  CHECK(initted_);
+  PrepareBatch();
+  RETURN_NOT_OK(iters_.front()->PredPushedNextBlock(dst));
+  FinishBatch();
+  return Status::OK();
+}
+
 void UnionIterator::PrepareBatch() {
   CHECK(initted_);
 
@@ -498,9 +522,13 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
     dst->arena()->Reset();
   }
 
+  // TODO: add a condition: If the block has support for predicate pushdown, call predicate pushdown
+
+  // LOG_WITH_PREFIX(INFO) << "NextBlock() called from MaterializingIterator";
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
-  RETURN_NOT_OK(MaterializeBlock(dst));
+  // RETURN_NOT_OK(MaterializeBlock(dst));
+  RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
   return Status::OK();
@@ -514,6 +542,10 @@ Status MaterializingIterator::PredPushedNextBlock(RowBlock* dst) {
 
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
+  // LOG_WITH_PREFIX(INFO) << "PredPushedNextBlock() called from MaterializingIterator";
+  // TODO: check whether kudu should be using EvalAndMaterializeBlock
+  //       e.g. the RowBlock is using DICT_ENCODING
+  // RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
@@ -527,11 +559,12 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
   //
   // This should at worst be equivalent to calling MaterializeColumn and then calling Evaluate
   RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
+  LOG(INFO) << "EvalAndMaterializeBlock called from MaterializingIterator";
   for (const auto& col_pred : col_idx_predicates_) {
     // Materialize the column with the decoder's Evaluate function
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     bool eval_complete = false;
-
+    LOG(INFO) << "predicates found" << get<1>(col_pred).ToString();
     // implemented in cfile_set.cc
     // Call Scan on the iterator such that dst_col gets populated with all the data for the column
     // and selection_vector is filled out appropriately. If this cannot be done by the iterator, 
@@ -541,8 +574,11 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
                                                   &dst_col,
                                                   dst->selection_vector(),
                                                   eval_complete));
+    // If the evaluation was not completed, call Evaluate
+    // This would happen if we're looking at things other than Equality/Range queries
     if (!eval_complete) {
-      std:;cerr << "Incomplete evlauation\n";
+      LOG(INFO) << "Manually evaluate predicate on the dst_col";
+      RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
       get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
     }
     if (!dst->selection_vector()->AnySelected()) {
@@ -551,6 +587,7 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     }
   }
   for (size_t col_idx : non_predicate_column_indexes_) {
+    LOG(INFO) << "non-predicates found" << col_idx;
     // Materialize the column itself into the row block.
     ColumnBlock dst_col(dst->column_block(col_idx));
     RETURN_NOT_OK(iter_->MaterializeColumn(col_idx, &dst_col));
@@ -643,7 +680,11 @@ bool PredicateEvaluatingIterator::HasNext() const {
 }
 
 Status PredicateEvaluatingIterator::NextBlock(RowBlock *dst) {
-  RETURN_NOT_OK(base_iter_->NextBlock(dst));
+  // This should just be a call to EvalAndMaterializeBlock or PushedPredNextBlock
+  // LOG_WITH_PREFIX(INFO) << "NextBlock() called from PredicateEvaluatingIterator";
+  // RETURN_NOT_OK(base_iter_->PredPushedNextBlock(dst));
+  // This behavior is likely incorrect. The col_idx_predicates_ are owned by this and not base_iter_
+  // instead of a call to NextBlock and then Evaluate, see what we do 
 
   for (const auto& predicate : col_idx_predicates_) {
     int32_t col_idx = dst->schema().find_column(predicate.column().name());
@@ -664,6 +705,10 @@ Status PredicateEvaluatingIterator::NextBlock(RowBlock *dst) {
 
 string PredicateEvaluatingIterator::ToString() const {
   return strings::Substitute("PredicateEvaluating($0)", base_iter_->ToString());
+}
+
+Status PredicateEvaluatingIterator::PredPushedNextBlock(RowBlock* dst) {
+  return NextBlock(dst);
 }
 
 } // namespace kudu

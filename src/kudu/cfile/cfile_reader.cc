@@ -43,6 +43,8 @@
 #include "kudu/util/slice.h"
 #include "kudu/util/status.h"
 #include "kudu/util/trace.h"
+#include "kudu/util/logging.h"
+
 
 DEFINE_bool(cfile_lazy_open, true,
             "Allow lazily opening of cfiles");
@@ -916,6 +918,7 @@ Status CFileIterator::Scan(ColumnBlock *dst) {
 //                            SelectionVector *sel,
 //                            bool& eval_complete) {
   CHECK(seeked_) << "not seeked";
+  LOG(INFO) << "Scan called from CFileIterator";
 
   // Use a column data view to been able to advance it as we read into it.
   ColumnDataView remaining_dst(dst);
@@ -1007,6 +1010,7 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
                            SelectionVector *sel,
                            bool& eval_complete) {
   CHECK(seeked_) << "not seeked";
+  LOG(INFO) << "Pushed Scan called from CFileIterator";
 
   // Use a column data view to been able to advance it as we read into it.
   ColumnDataView remaining_dst(dst);
@@ -1015,7 +1019,9 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
   DCHECK_LE(rem, dst->nrows());
 
   // Start with the SelectionVector completely empty and work up from there
-  sel->SetAllFalse();
+  // sel->SetAllFalse();
+  // sel->SetAllTrue();
+  // return Status::OK();
   size_t offset = 0;
   for (PreparedBlock *pb : prepared_blocks_) {
     if (pb->needs_rewind_) {
@@ -1068,9 +1074,14 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
     } else {
       // Fetch as many as we can from the current datablock.
       size_t this_batch = rem;
-      RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
-      
+
+      // Before this, generate the dictionary in pb->dblk_
+      // Immediately call EvaluatePredicate and use the dictionary to generate it
+      // RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
       // Change the behavior of CopyNextValues to also evaluate along the way
+      RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(pred, sel, offset, this_batch, &remaining_dst, eval_complete));
+
+
       pb->needs_rewind_ = true;
       DCHECK_LE(this_batch, rem);
 
@@ -1094,7 +1105,7 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
     }
 
 
-    pb->dblk_->EvaluatePredicate(pred, sel, offset, eval_complete);
+    // pb->dblk_->EvaluatePredicate(pred, sel, offset, eval_complete);
   }
 
   DCHECK_EQ(rem, 0) << "Should have fetched exactly the number of prepared rows";
