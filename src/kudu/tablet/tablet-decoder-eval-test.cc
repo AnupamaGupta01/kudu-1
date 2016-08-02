@@ -41,7 +41,7 @@ public:
 
   void FillTestTablet(size_t cardinality) {
     RowBuilder rb(client_schema_);
-    nrows_ = 2100;
+    nrows_ = 1000000;
     if (AllowSlowTests()) {
         nrows_ = 100000;
     }
@@ -63,96 +63,74 @@ public:
     }
 
   }
-
-  // Determines the number of expected results assuming predicate of [0, pred_upper)
-  // Evaluates the predicate specified by spec and compares the results
-  void TestScanYieldsExpectedResults(ScanSpec spec, size_t pred_upper) {
+  void TestTimedScanAndFilter(size_t pred_upper, size_t crd_idx) {
     Arena arena(128, 1028);
     AutoReleasePool pool;
+    ScanSpec spec;
+    const std::string lower_string = StringPrintf("%08" PRId64, static_cast<int64_t>(0));
+    const std::string upper_string = StringPrintf("%08" PRId64, static_cast<int64_t>(21));
+    Slice lower(lower_string);
+    Slice upper(upper_string);
+
+    auto string_pred = ColumnPredicate::Range(schema_.column(2), &lower, &upper);
+    spec.AddPredicate(string_pred);
     spec.OptimizeScan(schema_, &arena, &pool, true);
     ScanSpec orig_spec = spec;
-
-    for (size_t i = 0; i < cardinalities_.size(); i++) {
-      // Open a new tablet and fill it with the correct data
-      FillTestTablet(cardinalities_[i]);
-
-      size_t expected_sel_count = pred_upper > cardinalities_[i] ?
-                               nrows_ :
-                               (nrows_ / cardinalities_[i]) * pred_upper + std::min(nrows_ % cardinalities_[i], pred_upper);
-      gscoped_ptr<RowwiseIterator> iter;
-      ASSERT_OK(tablet()->NewRowIterator(client_schema_, &iter));
-      spec = orig_spec;
-      ASSERT_OK(iter->Init(&spec));
-      ASSERT_TRUE(spec.predicates().empty()) << "Should have accepted all predicates";
-
-      int fetched = 0;
-      LOG_TIMING(INFO, "Filtering by string value") {
-        ASSERT_OK(SilentIterateToStringList(iter.get(), fetched));
-      }
-      LOG(INFO) << "Cardinality: " << cardinalities_[i] << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
-      ASSERT_EQ(expected_sel_count, fetched);
-
-      int expected_blocks_from_disk;
-      int expected_rows_from_disk;
-      bool check_stats = true;
-      switch (GetParam()) {
-        case ALL_IN_MEMORY:
-          expected_blocks_from_disk = 0;
-          expected_rows_from_disk = 0;
-          break;
-        case SPLIT_MEMORY_DISK:
-          expected_blocks_from_disk = 1;
-          expected_rows_from_disk = 206;
-          break;
-        case ALL_ON_DISK:
-          // If AllowSlowTests() is true and all data is on disk
-          // (vs. first 206 rows -- containing the values we're looking
-          // for -- on disk and the rest in-memory), then the number
-          // of blocks and rows we will scan through can't be easily
-          // determined (as it depends on default cfile block size, the
-          // size of cfile header, and how much data each column takes
-          // up).
-          if (AllowSlowTests()) {
-            check_stats = false;
-          } else {
-            // If AllowSlowTests() is false, then all of the data fits
-            // into a single cfile.
-            expected_blocks_from_disk = 1;
-            expected_rows_from_disk = nrows_;
-          }
-          break;
-      }
-      if (check_stats) {
-        vector<IteratorStats> stats;
-        iter->GetIteratorStats(&stats);
-        for (const IteratorStats &col_stats : stats) {
-          EXPECT_EQ(expected_blocks_from_disk, col_stats.data_blocks_read_from_disk);
-          EXPECT_EQ(expected_rows_from_disk, col_stats.cells_read_from_disk);
-        }
-      }
-    }
-  }
-
-  // Test that a scan with an empty projection and the given spec
-  // returns the expected number of rows. The rows themselves
-  // should be empty.
-  void TestCountOnlyScanYieldsExpectedResults(ScanSpec spec) {
-    Arena arena(128, 1028);
-    AutoReleasePool pool;
-    spec.OptimizeScan(schema_, &arena, &pool, true);
-
-    Schema empty_schema(std::vector<ColumnSchema>(), 0);
-    gscoped_ptr <RowwiseIterator> iter;
-    ASSERT_OK(tablet()->NewRowIterator(empty_schema, &iter));
+    FillTestTablet(cardinalities_[crd_idx]);
+    size_t expected_sel_count = pred_upper > cardinalities_[crd_idx] ?
+                                nrows_ :
+                                (nrows_ / cardinalities_[crd_idx]) * pred_upper + std::min(nrows_ % cardinalities_[crd_idx], pred_upper);
+    gscoped_ptr<RowwiseIterator> iter;
+    ASSERT_OK(tablet()->NewRowIterator(client_schema_, &iter));
+    spec = orig_spec;
     ASSERT_OK(iter->Init(&spec));
     ASSERT_TRUE(spec.predicates().empty()) << "Should have accepted all predicates";
 
-    vector <string> results;
-    ASSERT_OK(IterateToStringList(iter.get(), &results));
-    ASSERT_EQ(11, results.size());
-    for (const string &result : results) {
-        ASSERT_EQ("()", result);
+    int fetched = 0;
+    LOG_TIMING(INFO, "Filtering by string value") {
+      ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
     }
+    LOG(INFO) << "Cardinality: " << cardinalities_[crd_idx] << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
+    ASSERT_EQ(expected_sel_count, fetched);
+
+    int expected_blocks_from_disk;
+    int expected_rows_from_disk;
+    bool check_stats = true;
+    switch (GetParam()) {
+      case ALL_IN_MEMORY:
+        expected_blocks_from_disk = 0;
+        expected_rows_from_disk = 0;
+        break;
+      case SPLIT_MEMORY_DISK:
+        expected_blocks_from_disk = 1;
+        expected_rows_from_disk = 206;
+        break;
+      case ALL_ON_DISK:
+        // If AllowSlowTests() is true and all data is on disk
+        // (vs. first 206 rows -- containing the values we're looking
+        // for -- on disk and the rest in-memory), then the number
+        // of blocks and rows we will scan through can't be easily
+        // determined (as it depends on default cfile block size, the
+        // size of cfile header, and how much data each column takes
+        // up).
+        if (AllowSlowTests()) {
+          check_stats = false;
+        } else {
+          // If AllowSlowTests() is false, then all of the data fits
+          // into a single cfile.
+          expected_blocks_from_disk = 1;
+          expected_rows_from_disk = nrows_;
+        }
+        break;
+    }
+//    if (check_stats) {
+//      vector<IteratorStats> stats;
+//      iter->GetIteratorStats(&stats);
+//      for (const IteratorStats &col_stats : stats) {
+//        EXPECT_EQ(expected_blocks_from_disk, col_stats.data_blocks_read_from_disk);
+//        EXPECT_EQ(expected_rows_from_disk, col_stats.cells_read_from_disk);
+//      }
+//    }
   }
 
 private:
@@ -162,51 +140,59 @@ private:
 };
 
 
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
-  // Push down a double-ended range on the integer value column.
-
-  ScanSpec spec;
-  const std::string lower_string = StringPrintf("%08" PRId64, static_cast<int64_t>(0));
-  const std::string upper_string = StringPrintf("%08" PRId64, static_cast<int64_t>(21));
-  Slice lower(lower_string);
-  Slice upper(upper_string);
-
-  auto string_pred = ColumnPredicate::Range(schema_.column(2), &lower, &upper);
-  spec.AddPredicate(string_pred);
-
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark0) {
   // Performs a scan on the data with bounds string( [0,21) )
-  TestScanYieldsExpectedResults(spec, 21);
-
-  // TODO: support non-key predicate pushdown on columns which aren't
-  // part of the projection. The following line currently would crash.
-  // TestCountOnlyScanYieldsExpectedResults(spec);
-
-  // TODO: collect IO statistics per column, verify that most of the string blocks
-  // were not read.
+  TestTimedScanAndFilter(21, 0);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark1) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 1);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark2) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 2);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark3) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 3);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark4) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 4);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark5) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 5);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark6) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 6);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark7) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 7);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark8) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 8);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark9) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 9);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark10) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 10);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark11) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 11);
+}
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark12) {
+  // Performs a scan on the data with bounds string( [0,21) )
+  TestTimedScanAndFilter(21, 12);
 }
 
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmarkNext) {
-  // Push down a double-ended range on the integer value column.
-
-  ScanSpec spec;
-  const std::string lower_string = StringPrintf("%08" PRId64, static_cast<int64_t>(0));
-  const std::string upper_string = StringPrintf("%08" PRId64, static_cast<int64_t>(21));
-  Slice lower(lower_string);
-  Slice upper(upper_string);
-
-  auto string_pred = ColumnPredicate::Range(schema_.column(2), &lower, &upper);
-  spec.AddPredicate(string_pred);
-
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestScanYieldsExpectedResults(spec, 22);
-
-  // TODO: support non-key predicate pushdown on columns which aren't
-  // part of the projection. The following line currently would crash.
-  // TestCountOnlyScanYieldsExpectedResults(spec);
-
-  // TODO: collect IO statistics per column, verify that most of the string blocks
-  // were not read.
-}
 
 
 INSTANTIATE_TEST_CASE_P(AllDisk, TabletDecoderEvalTest, ::testing::Values(ALL_ON_DISK));
