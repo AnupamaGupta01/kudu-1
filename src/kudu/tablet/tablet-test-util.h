@@ -66,7 +66,7 @@ class KuduTabletTest : public KuduTest {
     string dir = root_dir.empty() ? GetTestPath("fs_root" + std::to_string(n_tablets_)) : root_dir;
     TabletHarness::Options opts(dir);
     opts.enable_metrics = true;
-    bool first_time = harness_ == NULL;
+
     harness_.reset(new TabletHarness(schema_, opts));
     n_tablets_++;
     CHECK_OK(harness_->Create(true));
@@ -107,7 +107,7 @@ class KuduTabletTest : public KuduTest {
     tx_state.Finish();
   }
 
-  const std::shared_ptr<Tablet>& tablet() {
+  const std::shared_ptr<Tablet>& tablet() const {
     return harness_->tablet();
   }
 

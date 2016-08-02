@@ -523,12 +523,10 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
   }
 
   // TODO: add a condition: If the block has support for predicate pushdown, call predicate pushdown
-
-  // LOG_WITH_PREFIX(INFO) << "NextBlock() called from MaterializingIterator";
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
-  // RETURN_NOT_OK(MaterializeBlock(dst));
-  RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
+  RETURN_NOT_OK(MaterializeBlock(dst));
+//  RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
   return Status::OK();
@@ -542,10 +540,9 @@ Status MaterializingIterator::PredPushedNextBlock(RowBlock* dst) {
 
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
-  // LOG_WITH_PREFIX(INFO) << "PredPushedNextBlock() called from MaterializingIterator";
+
   // TODO: check whether kudu should be using EvalAndMaterializeBlock
   //       e.g. the RowBlock is using DICT_ENCODING
-  // RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 

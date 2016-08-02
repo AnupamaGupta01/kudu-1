@@ -39,7 +39,7 @@ public:
 
   void FillTestTablet(const size_t strlen, const size_t cardinality) {
     RowBuilder rb(client_schema_);
-    nrows_ = 2100;
+    nrows_ = 100000;
     if (AllowSlowTests()) {
         nrows_ = 100000;
     }
@@ -86,6 +86,7 @@ public:
 
     int fetched = 0;
     LOG_TIMING(INFO, "Filtering by string value") {
+//      ASSERT_OK(SilentIterateToStringList(iter.get(), fetched));
       ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
     }
     LOG(INFO) << "Cardinality: " << cardinality << ", strlen: " << strlen << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
