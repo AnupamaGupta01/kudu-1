@@ -79,13 +79,9 @@ class VectorIterator : public ColumnwiseIterator {
   }
 
   Status EvalAndMaterializeColumn(size_t col_idx,
-                                  const ColumnPredicate& pred,
-                                  ColumnBlock *dst,
-                                  SelectionVector *sel,
-                                  bool& eval_complete) OVERRIDE {
-    LOG(INFO) << "EvalAndMaterializeColumn called from generic_iterators-test.cc";
-    eval_complete = false;
-    return MaterializeColumn(col_idx, dst);
+                                  ColumnEvalContext *ctx) OVERRIDE {
+    ctx->eval_complete() = false;
+    return MaterializeColumn(col_idx, ctx->block());
   }
 
   virtual Status FinishBatch() OVERRIDE {

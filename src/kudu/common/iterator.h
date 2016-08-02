@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "kudu/common/column_eval_context.h"
 #include "kudu/common/column_predicate.h"
 #include "kudu/common/columnblock.h"
 #include "kudu/common/rowblock.h"
@@ -101,10 +102,7 @@ class ColumnwiseIterator : public virtual IteratorBase {
   // arena, if non-null.
   virtual Status MaterializeColumn(size_t col_idx, ColumnBlock *dst) = 0;
   virtual Status EvalAndMaterializeColumn(size_t col_idx,
-                                          const ColumnPredicate& pred,
-                                          ColumnBlock *dst,
-                                          SelectionVector *sel,
-                                          bool& eval_complete) = 0;
+                                          ColumnEvalContext *ctx) = 0;
 
   // Finish the current batch.
   virtual Status FinishBatch() = 0;

@@ -23,6 +23,7 @@
 #include "kudu/cfile/cfile_util.h"
 #include "kudu/cfile/cfile_writer.h"
 #include "kudu/common/scan_spec.h"
+#include "kudu/common/column_eval_context.h"
 #include "kudu/gutil/dynamic_annotations.h"
 #include "kudu/gutil/map-util.h"
 #include "kudu/gutil/stl_util.h"
@@ -452,15 +453,10 @@ Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
   ColumnIterator* iter = col_iters_[col_idx];
   return iter->Scan(dst);
 }
-
 Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
-                                                  const ColumnPredicate& pred,
-                                                  ColumnBlock *dst,
-                                                  SelectionVector *sel,
-                                                  bool& eval_complete) {
-  // Alternatively, make this a call to GetDecoders or something and then evaluate 
+                                                    ColumnEvalContext *ctx) {
   // LOG(INFO) << "EvalAndMaterializeColumn called from CFileSet::Iterator";
-  CHECK_EQ(prepared_count_, dst->nrows());
+  CHECK_EQ(prepared_count_, ctx->block()->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
   RETURN_NOT_OK(PrepareColumn(col_idx));
@@ -468,7 +464,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
 
   // implemented in cfile_reader.cc
   // return iter->Scan(dst);
-  return iter->Scan(pred, dst, sel, eval_complete);
+  return iter->Scan(ctx);
   // alternatively, iter->GetDecoders() to get to the decoders and then call the dblk->EvaluatePredicate
   // iter->GetDecoders(rle_decoder, std::vector<dblk>)
   //   rle_decoder: if null, proceed as with Scan::else, otherwise do RLE while loop

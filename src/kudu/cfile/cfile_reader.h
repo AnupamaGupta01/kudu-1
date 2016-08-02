@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "kudu/common/column_eval_context.h"
 #include "kudu/common/columnblock.h"
 #include "kudu/common/types.h"
 #include "kudu/cfile/block_cache.h"
@@ -250,10 +251,7 @@ class ColumnIterator {
   // Should consult the PreparedBlocks' decoders and return the SelectionVector
   // so that it corresponds to the evaluation of the ColumnPredicate
   // Set eval_complete to true if the decoder completely evaluates the predicate
-  virtual Status Scan(const ColumnPredicate& pred,
-                      ColumnBlock *dst,
-                      SelectionVector *sel,
-                      bool& eval_complete) = 0;
+  virtual Status Scan(ColumnEvalContext *ctx) = 0;
   
   // Finish processing the current batch, advancing the iterators
   // such that the next call to PrepareBatch() will start where the previous
@@ -284,10 +282,7 @@ class DefaultColumnValueIterator : public ColumnIterator {
 
   Status PrepareBatch(size_t *n) OVERRIDE;
   Status Scan(ColumnBlock *dst) OVERRIDE;
-  Status Scan(const ColumnPredicate& pred,
-                      ColumnBlock *dst,
-                      SelectionVector *sel,
-                      bool& eval_complete) OVERRIDE;
+  Status Scan(ColumnEvalContext *ctx) OVERRIDE;
   Status FinishBatch() OVERRIDE;
 
   const IteratorStats& io_statistics() const OVERRIDE { return io_stats_; }
@@ -361,10 +356,7 @@ class CFileIterator : public ColumnIterator {
   // This does _not_ advance the position in the underlying file. Multiple
   // calls to Scan() will re-read the same values.
   Status Scan(ColumnBlock *dst) OVERRIDE;
-  Status Scan(const ColumnPredicate& pred,
-              ColumnBlock *dst,
-              SelectionVector *sel,
-              bool& eval_complete) OVERRIDE;
+  Status Scan(ColumnEvalContext *ctx) OVERRIDE;
 
   // Finish processing the current batch, advancing the iterators
   // such that the next call to PrepareBatch() will start where the previous

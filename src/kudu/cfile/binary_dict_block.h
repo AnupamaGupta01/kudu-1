@@ -39,6 +39,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <kudu/common/column_eval_context.h>
 
 #include "kudu/cfile/block_encodings.h"
 #include "kudu/cfile/block_pointer.h"
@@ -126,7 +127,7 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   virtual Status SeekAtOrAfterValue(const void* value, bool* exact_match) OVERRIDE;
   Status SeekToWord(const void* word, bool* exact_match);
   Status CopyNextValues(size_t* n, ColumnDataView* dst) OVERRIDE;
-
+  
   virtual bool HasNext() const OVERRIDE {
     return data_decoder_->HasNext();
   }
@@ -145,12 +146,10 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
   static const size_t kMinHeaderSize = sizeof(uint32_t) * 1;
 
-  Status EvaluatePredicate(const ColumnPredicate& pred,
-                           SelectionVector *sel,
+  Status EvaluatePredicate(ColumnEvalContext *ctx,
                            size_t& offset,
                            size_t& n,
-                           ColumnDataView* dst,
-                           bool& eval_complete) OVERRIDE;
+                           ColumnDataView* dst) OVERRIDE;
 
 
  private:

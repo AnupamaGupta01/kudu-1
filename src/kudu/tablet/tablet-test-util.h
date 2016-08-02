@@ -47,7 +47,8 @@ class KuduTabletTest : public KuduTest {
  public:
   explicit KuduTabletTest(const Schema& schema)
     : schema_(schema.CopyWithColumnIds()),
-      client_schema_(schema) {
+      client_schema_(schema),
+      n_tablets_(0) {
     // Keep unit tests fast, but only if no one has set the flag explicitly.
     if (google::GetCommandLineFlagInfoOrDie("enable_data_block_fsync").is_default) {
       FLAGS_enable_data_block_fsync = false;
@@ -60,13 +61,15 @@ class KuduTabletTest : public KuduTest {
     SetUpTestTablet();
   }
 
+  // Always create a new TabletHarness with a new fs_root
   void CreateTestTablet(const string& root_dir = "") {
-    string dir = root_dir.empty() ? GetTestPath("fs_root") : root_dir;
+    string dir = root_dir.empty() ? GetTestPath("fs_root" + std::to_string(n_tablets_)) : root_dir;
     TabletHarness::Options opts(dir);
     opts.enable_metrics = true;
     bool first_time = harness_ == NULL;
     harness_.reset(new TabletHarness(schema_, opts));
-    CHECK_OK(harness_->Create(first_time));
+    n_tablets_++;
+    CHECK_OK(harness_->Create(true));
   }
 
   void SetUpTestTablet(const string& root_dir = "") {
@@ -104,7 +107,7 @@ class KuduTabletTest : public KuduTest {
     tx_state.Finish();
   }
 
-  const std::shared_ptr<Tablet>& tablet() const {
+  const std::shared_ptr<Tablet>& tablet() {
     return harness_->tablet();
   }
 
@@ -115,8 +118,8 @@ class KuduTabletTest : public KuduTest {
  protected:
   const Schema schema_;
   const Schema client_schema_;
-
   gscoped_ptr<TabletHarness> harness_;
+  size_t n_tablets_;
 };
 
 class KuduRowSetTest : public KuduTabletTest {
@@ -142,11 +145,12 @@ class KuduRowSetTest : public KuduTabletTest {
 // Iterate through the values without outputting them at the end
 // This is strictly a measure of decoding and evaluating predicates
 static inline Status SilentIterateToStringList(RowwiseIterator *iter,
+                                               int& fetched,
                                                int limit = INT_MAX) {
   Schema schema = iter->schema();
   Arena arena(1024, 1024);
   RowBlock block(schema, 100, &arena);
-  int fetched = 0;
+  fetched = 0;
   while (iter->HasNext() && fetched < limit) {
     RETURN_NOT_OK(iter->NextBlock(&block));
     for (size_t i = 0; i < block.nrows() && fetched < limit; i++) {
@@ -155,17 +159,17 @@ static inline Status SilentIterateToStringList(RowwiseIterator *iter,
       }
     }
   }
-  std::cerr << "Number selected with original: " << fetched << std::endl;
   return Status::OK();
 }
 // Iterate through the values without outputting them at the end
 // using the EvalAndMaterializeBlock function to push evaluation to the decoders
 static inline Status PushedIterateToStringList(RowwiseIterator *iter,
+                                               int& fetched,
                                                int limit = INT_MAX) {
   Schema schema = iter->schema();
   Arena arena(1024, 1024);
   RowBlock block(schema, 100, &arena);
-  int fetched = 0;
+  fetched = 0;
   while (iter->HasNext() && fetched < limit) {
     RETURN_NOT_OK(iter->PredPushedNextBlock(&block));
     for (size_t i = 0; i < block.nrows() && fetched < limit; i++) {
@@ -174,7 +178,6 @@ static inline Status PushedIterateToStringList(RowwiseIterator *iter,
       }
     }
   }
-  std::cerr << "Number selected with pushed: " << fetched << std::endl;
   return Status::OK();
 }
 

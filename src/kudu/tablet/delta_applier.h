@@ -63,10 +63,7 @@ class DeltaApplier : public ColumnwiseIterator {
 
   Status MaterializeColumn(size_t col_idx, ColumnBlock *dst) OVERRIDE;
   Status EvalAndMaterializeColumn(size_t col_idx,
-                                          const ColumnPredicate& pred,
-                                          ColumnBlock *dst,
-                                          SelectionVector *sel,
-                                          bool& eval_complete) OVERRIDE;
+                                  ColumnEvalContext *ctx) OVERRIDE;
  private:
   friend class DeltaTracker;
 

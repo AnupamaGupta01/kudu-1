@@ -30,18 +30,16 @@ public:
     : KuduTabletTest(Schema({ColumnSchema("key", INT32),
                              ColumnSchema("int_val", INT32),
                              ColumnSchema("string_val", STRING, false, NULL, NULL,
-                             ColumnStorageAttributes(DICT_ENCODING, DEFAULT_COMPRESSION)) }, 1)),
-      cardinalities_({5, 10, 15, 20, 30, 40, 60, 80, 100, 200, 400, 500, 1000}),
-      num_tablets_(cardinalities_.size()) {
+                             ColumnStorageAttributes(DICT_ENCODING, DEFAULT_COMPRESSION)) }, 1)) {
   }
 
   virtual void SetUp() OVERRIDE {
     KuduTabletTest::SetUp();
   }
 
-  void FillTestTablet(size_t cardinality) {
+  void FillTestTablet(const size_t strlen, const size_t cardinality) {
     RowBuilder rb(client_schema_);
-    nrows_ = 1000000;
+    nrows_ = 2100;
     if (AllowSlowTests()) {
         nrows_ = 100000;
     }
@@ -51,7 +49,7 @@ public:
     for (int64_t i = 0; i < nrows_; i++) {
       CHECK_OK(row.SetInt32(0, i));
       CHECK_OK(row.SetInt32(1, i * 10));
-      CHECK_OK(row.SetStringCopy(2, StringPrintf("%08" PRId64, i % cardinality)));
+      CHECK_OK(row.SetStringCopy(2, StringPrintf(("%0"+std::to_string(strlen) + PRId64).c_str(), i % cardinality)));
       ASSERT_OK_FAST(writer.Insert(row));
 
       if (i == 205 && GetParam() == SPLIT_MEMORY_DISK) {
@@ -63,12 +61,12 @@ public:
     }
 
   }
-  void TestTimedScanAndFilter(size_t pred_upper, size_t crd_idx) {
+  void TestTimedScanAndFilter(const size_t pred_upper, const size_t strlen, const size_t cardinality) {
     Arena arena(128, 1028);
     AutoReleasePool pool;
     ScanSpec spec;
-    const std::string lower_string = StringPrintf("%08" PRId64, static_cast<int64_t>(0));
-    const std::string upper_string = StringPrintf("%08" PRId64, static_cast<int64_t>(21));
+    const std::string lower_string = StringPrintf(("%0"+std::to_string(strlen) + PRId64).c_str(), static_cast<int64_t>(0));
+    const std::string upper_string = StringPrintf(("%0"+std::to_string(strlen) + PRId64).c_str(), static_cast<int64_t>(21));
     Slice lower(lower_string);
     Slice upper(upper_string);
 
@@ -76,10 +74,10 @@ public:
     spec.AddPredicate(string_pred);
     spec.OptimizeScan(schema_, &arena, &pool, true);
     ScanSpec orig_spec = spec;
-    FillTestTablet(cardinalities_[crd_idx]);
-    size_t expected_sel_count = pred_upper > cardinalities_[crd_idx] ?
+    FillTestTablet(strlen, cardinality);
+    size_t expected_sel_count = pred_upper > cardinality ?
                                 nrows_ :
-                                (nrows_ / cardinalities_[crd_idx]) * pred_upper + std::min(nrows_ % cardinalities_[crd_idx], pred_upper);
+                                (nrows_ / cardinality) * pred_upper + std::min(nrows_ % cardinality, pred_upper);
     gscoped_ptr<RowwiseIterator> iter;
     ASSERT_OK(tablet()->NewRowIterator(client_schema_, &iter));
     spec = orig_spec;
@@ -90,7 +88,7 @@ public:
     LOG_TIMING(INFO, "Filtering by string value") {
       ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
     }
-    LOG(INFO) << "Cardinality: " << cardinalities_[crd_idx] << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
+    LOG(INFO) << "Cardinality: " << cardinality << ", strlen: " << strlen << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
     ASSERT_EQ(expected_sel_count, fetched);
 
     int expected_blocks_from_disk;
@@ -134,65 +132,21 @@ public:
   }
 
 private:
-  const std::vector<const size_t> cardinalities_;
-  size_t num_tablets_;
   size_t nrows_;
 };
 
 
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark0) {
+TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
   // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 0);
+  const std::vector<const size_t> cardinalities = {2, 4, 6, 8, 10, 15, 20, 30, 40, 80, 100, 200, 400, 600, 800, 1000};
+  const std::vector<const size_t> strlens = {8, 16, 24, 32, 40, 48, 56, 64};
+  for (const size_t crd : cardinalities) {
+    for (const size_t strlen : strlens) {
+      TestTimedScanAndFilter(21, strlen, crd);
+      SetUpTestTablet();
+    }
+  }
 }
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark1) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 1);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark2) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 2);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark3) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 3);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark4) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 4);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark5) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 5);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark6) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 6);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark7) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 7);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark8) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 8);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark9) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 9);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark10) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 10);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark11) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 11);
-}
-TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark12) {
-  // Performs a scan on the data with bounds string( [0,21) )
-  TestTimedScanAndFilter(21, 12);
-}
-
 
 
 INSTANTIATE_TEST_CASE_P(AllDisk, TabletDecoderEvalTest, ::testing::Values(ALL_ON_DISK));

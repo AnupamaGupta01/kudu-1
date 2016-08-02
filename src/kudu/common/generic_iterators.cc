@@ -564,16 +564,16 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     // Materialize the column with the decoder's Evaluate function
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     bool eval_complete = false;
-    // LOG(INFO) << "predicates found" << get<1>(col_pred).ToString();
+    // LOG(INFO) << "predicates found" << get<1>(col_pred).ToString()ddcc;
     // implemented in cfile_set.cc
     // Call Scan on the iterator such that dst_col gets populated with all the data for the column
     // and selection_vector is filled out appropriately. If this cannot be done by the iterator, 
     // eval_complete should be set to false, and Evaluate will be called on the data.
-    RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(get<0>(col_pred),
-                                                  get<1>(col_pred),
-                                                  &dst_col,
-                                                  dst->selection_vector(),
-                                                  eval_complete));
+    ColumnEvalContext *ctx = new ColumnEvalContext(get<1>(col_pred),
+                                                   &dst_col,
+                                                   dst->selection_vector(),
+                                                   eval_complete);
+    RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(get<0>(col_pred), ctx));
     // If the evaluation was not completed, call Evaluate
     // This would happen if we're looking at things other than Equality/Range queries
     if (!eval_complete) {
@@ -607,6 +607,8 @@ Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
     // Materialize the column itself into the row block.
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
+    // this call to MaterializeColumn could be FetchDecoders
+    
 
     // Evaluate the column predicate.
     get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());

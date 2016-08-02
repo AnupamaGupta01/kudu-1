@@ -339,7 +339,6 @@ class CFileTestBase : public KuduTest {
 
       data_generator->Build(towrite);
       DCHECK_EQ(towrite, data_generator->block_entries());
-
       if (DataGeneratorType::has_nulls()) {
         ASSERT_OK_FAST(w.AppendNullableEntries(data_generator->null_bitmap(),
                                                       data_generator->values(),

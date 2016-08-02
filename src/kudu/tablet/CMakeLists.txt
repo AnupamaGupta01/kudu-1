@@ -52,8 +52,7 @@ set(TABLET_SRCS
   delta_iterator_merger.cc
   delta_stats.cc
   delta_store.cc
-  delta_tracker.cc
-)
+  delta_tracker.cc)
 
 PROTOBUF_GENERATE_CPP(
   TABLET_PROTO_SRCS TABLET_PROTO_HDRS TABLET_PROTO_TGTS
@@ -98,6 +97,7 @@ ADD_KUDU_TEST(cfile_set-test)
 ADD_KUDU_TEST(tablet-pushdown-test)
 ADD_KUDU_TEST(pred-pushdown-test)
 ADD_KUDU_TEST(tablet-schema-test)
+ADD_KUDU_TEST(tablet-decoder-eval-test)
 ADD_KUDU_TEST(tablet_bootstrap-test)
 ADD_KUDU_TEST(maintenance_manager-test)
 ADD_KUDU_TEST(metadata-test)

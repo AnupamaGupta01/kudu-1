@@ -505,12 +505,9 @@ Status DefaultColumnValueIterator::Scan(ColumnBlock *dst)  {
   return Status::OK();
 }
 
-Status DefaultColumnValueIterator::Scan(const ColumnPredicate& pred,
-                                        ColumnBlock *dst,
-                                        SelectionVector *sel,
-                                        bool& eval_complete) {
+Status DefaultColumnValueIterator::Scan(ColumnEvalContext *ctx) {
   // TODO: fill this out
-  return Scan(dst);
+  return Scan(ctx->block());
 }
 
 Status DefaultColumnValueIterator::FinishBatch() {
@@ -1005,25 +1002,22 @@ Status CFileIterator::Scan(ColumnBlock *dst) {
   return Status::OK();
 }
 
-Status CFileIterator::Scan(const ColumnPredicate& pred,
-                           ColumnBlock *dst,
-                           SelectionVector *sel,
-                           bool& eval_complete) {
+Status CFileIterator::Scan(ColumnEvalContext *ctx) {
   CHECK(seeked_) << "not seeked";
   // LOG(INFO) << "Pushed Scan called from CFileIterator";
 
   // Use a column data view to been able to advance it as we read into it.
-  ColumnDataView remaining_dst(dst);
+  ColumnDataView remaining_dst(ctx->block());
 
   uint32_t rem = last_prepare_count_;
-  DCHECK_LE(rem, dst->nrows());
+  DCHECK_LE(rem, ctx->block()->nrows());
 
   // Start with the SelectionVector completely empty and work up from there
-  sel->SetAllFalse();
-  // sel->SetAllTrue();
-  // return Status::OK();
+  ctx->sel()->SetAllFalse();
   size_t offset = 0;
   for (PreparedBlock *pb : prepared_blocks_) {
+    // LOG(INFO) << "NULLABLE EVALUATION-2";
+
     if (pb->needs_rewind_) {
       // Seek back to the saved position.
       SeekToPositionInBlock(pb, pb->rewind_idx_);
@@ -1031,12 +1025,10 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
       // that might be more efficient (allowing the decoder to save internal state
       // instead of having to reconstruct it)
     }
-
     if (reader_->is_nullable()) {
-      DCHECK(dst->is_nullable());
+      DCHECK(ctx->block()->is_nullable());
 
       size_t nrows = std::min(rem, pb->num_rows_in_block_ - pb->idx_in_block_);
-
       // Fill column bitmap
       size_t count = nrows;
       while (count > 0) {
@@ -1048,11 +1040,11 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
             Substitute("Unexpected EOF on NULL bitmap read. Expected at least $0 more rows",
                        count));
         }
-
         size_t this_batch = nblock;
         if (not_null) {
           // TODO: Maybe copy all and shift later?
-          RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
+          // RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
+          RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(ctx, offset, this_batch, &remaining_dst));
           DCHECK_EQ(nblock, this_batch);
           pb->needs_rewind_ = true;
         } else {
@@ -1074,19 +1066,19 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
     } else {
       // Fetch as many as we can from the current datablock.
       size_t this_batch = rem;
-
-      // Before this, generate the dictionary in pb->dblk_
-      // Immediately call EvaluatePredicate and use the dictionary to generate it
+      // LOG(INFO) << "NOTNULLABLE AY";
       // RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
-      // Change the behavior of CopyNextValues to also evaluate along the way
-      RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(pred, sel, offset, this_batch, &remaining_dst, eval_complete));
+
+      // Write the block to the remaining_dst, optionally writing to sel
+      // If sel gets written to, eval_complete will be set to true
+      RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(ctx, offset, this_batch, &remaining_dst));
 
 
       pb->needs_rewind_ = true;
       DCHECK_LE(this_batch, rem);
 
       // If the column is nullable, set all bits to true
-      if (dst->is_nullable()) {
+      if (ctx->block()->is_nullable()) {
         remaining_dst.SetNullBits(this_batch, true);
       }
 
@@ -1103,9 +1095,6 @@ Status CFileIterator::Scan(const ColumnPredicate& pred,
     } else {
       break;
     }
-
-
-    // pb->dblk_->EvaluatePredicate(pred, sel, offset, eval_complete);
   }
 
   DCHECK_EQ(rem, 0) << "Should have fetched exactly the number of prepared rows";

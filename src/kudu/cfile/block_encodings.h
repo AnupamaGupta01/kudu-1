@@ -22,6 +22,7 @@
 
 #include <glog/logging.h>
 
+#include "kudu/common/column_eval_context.h"
 #include "kudu/common/rowid.h"
 #include "kudu/common/rowblock.h"
 #include "kudu/common/column_predicate.h"
@@ -133,14 +134,15 @@ class BlockDecoder {
   // allocated in the dst block's arena.
   virtual Status CopyNextValues(size_t *n, ColumnDataView *dst) = 0;
 
-  //
-  virtual Status EvaluatePredicate(const ColumnPredicate& pred,
-                           SelectionVector *sel,
+  // offset: index in ctx->sel() that the decoder stores
+  // n: number of elements to be read from the decoder
+  // dst: stores the data
+  virtual Status EvaluatePredicate(ColumnEvalContext *ctx,
                            size_t& offset,
                            size_t& n,
-                           ColumnDataView* dst,
-                           bool& eval_complete) {
-    eval_complete = false;
+                           ColumnDataView* dst) {
+    CopyNextValues(&n, dst);
+    ctx->eval_complete() = false;
     return Status::OK();
   }
 

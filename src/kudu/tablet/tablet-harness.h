@@ -73,7 +73,7 @@ class TabletHarness {
   };
 
   TabletHarness(const Schema& schema, Options options)
-      : options_(std::move(options)), schema_(schema) {}
+      : options_(std::move(options)), schema_(schema), n_tablets_(0) {}
 
   Status Create(bool first_time) {
     std::pair<PartitionSchema, Partition> partition(CreateDefaultPartition(schema_));
@@ -88,8 +88,8 @@ class TabletHarness {
     scoped_refptr<TabletMetadata> metadata;
     RETURN_NOT_OK(TabletMetadata::LoadOrCreate(fs_manager_.get(),
                                                options_.tablet_id,
-                                               "KuduTableTest",
-                                               "KuduTableTestId",
+                                               "KuduTableTest" + std::to_string(n_tablets_),
+                                               "KuduTableTestId" + std::to_string(n_tablets_),
                                                schema_,
                                                partition.first,
                                                partition.second,
@@ -105,6 +105,7 @@ class TabletHarness {
                              std::shared_ptr<MemTracker>(),
                              metrics_registry_.get(),
                              new log::LogAnchorRegistry()));
+    n_tablets_++;
     return Status::OK();
   }
 
@@ -139,6 +140,7 @@ class TabletHarness {
   Schema schema_;
   gscoped_ptr<FsManager> fs_manager_;
   std::shared_ptr<Tablet> tablet_;
+  size_t n_tablets_;
 };
 
 } // namespace tablet

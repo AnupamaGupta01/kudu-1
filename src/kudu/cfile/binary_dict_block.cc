@@ -20,6 +20,7 @@
 #include <glog/logging.h>
 #include <algorithm>
 #include <unordered_set>
+#include <set>
 
 #include "kudu/cfile/cfile_reader.h"
 #include "kudu/cfile/cfile_util.h"
@@ -240,7 +241,7 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
 }
 
 static bool CompareRange(Slice& str, Slice& lower, Slice& upper) {
-  // LOG(INFO) << " " << str << " " << lower.data() << " " << upper.data();
+  //   LOG(INFO) << " " << str << " " << lower.data() << " " << upper.data();
   // will return true only if str is between [lower, upper)
   if (lower.compare(upper) == 0) {
     // this is an equality predicate
@@ -260,90 +261,84 @@ static bool CompareRange(Slice& str, Slice& lower, Slice& upper) {
   }
 }
 
-Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
-                                                 SelectionVector *sel,
+// 
+Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
                                                  size_t& offset,
                                                  size_t& n,
-                                                 ColumnDataView* dst,
-                                                 bool& eval_complete) {
-  // start empty and scan for the correct values
+                                                 ColumnDataView* dst) {
   // offset is the offset in the selectionvector that we're currently looking at, since there will be
   //  multiple blocks
   // sel->SetAllFalse();  // SetAllFalse should be called before looping through all these blocks
   //   This should not happen per EvaluatePredicate call since there may be multiple bocks per batch
-  
+
   std::set<uint32_t> pred_codewords;
   // std::unordered_set<uint32_t, std::hash<uint32_t>> pred_codewords;
   Slice lower, upper;
-  // LOG(INFO) << *reinterpret_cast<const Slice*>(pred.raw_lower());
-  // LOG(INFO) << *reinterpret_cast<const Slice*>(pred.raw_upper());
+
   // Set up the upper and lower bound slices, empty bound is set to empty Slice()
-  if (pred.raw_lower() != nullptr) {
-    lower = *reinterpret_cast<const Slice*>(pred.raw_lower());
+  if (ctx->pred().raw_lower() != nullptr) {
+    lower = *reinterpret_cast<const Slice*>(ctx->pred().raw_lower());
   }
   else {
     lower = Slice();
   }
-  if (pred.raw_upper() != nullptr) {
-    upper = *reinterpret_cast<const Slice*>(pred.raw_upper());
+  if (ctx->pred().raw_upper() != nullptr) {
+    upper = *reinterpret_cast<const Slice*>(ctx->pred().raw_upper());
   }
   else {
     upper = Slice();
   }
 
   // Set eval_complete depending on the predicate type
-  switch (pred.predicate_type()) {
+  switch (ctx->pred().predicate_type()) {
     case PredicateType::None: {
-      eval_complete = true;
+      ctx->eval_complete() = true;
       return Status::OK();
     }
     case PredicateType::Range: {
-      eval_complete = true;
+      ctx->eval_complete() = true;
       break;
     }
     case PredicateType::Equality: {
-      eval_complete = true;
+      ctx->eval_complete() = true;
       upper = lower;
       break;
     }
-    case PredicateType::IsNotNull: {  
-      eval_complete = false;
+    case PredicateType::IsNotNull: {
+      ctx->eval_complete() = false;
       return Status::OK();
     }
   }
+
   size_t nwords = dict_decoder_->Count();
-  // LOG(INFO) << "EvaluatePredicate called from BinaryDictBlockDecoder with " << n << " rows at " << offset << ", checking " << nwords << " words.";
-  // O(d*l)
+  // TODO: determine a heuristic for when to short-circuit
+  // f(nwords, nrows, avg_strlen)
+  // - avg_strlen can be substituted with size_estimate, since avg_strlen ~ size_estimate/nwords
+  // TODO: if dict_decoder_ is reading directly from file, should pull into memory and evaluate with cached copy
+
+  // TODO: kPlainBinaryMode should call data_decoder->CopyNextValues(dst)
+
   // Scan through the entries in the dictionary and determine which satisfy the predicate
   for (size_t i = 0; i < nwords; i++) {  
     Slice cur_string = dict_decoder_->string_at_index(i);
-
     // Store the codewords that satisfy the predicate to some storage (set, unordered_set, etc.)
     if (CompareRange(cur_string, lower, upper)) {
-      // LOG(INFO) << cur_string << " matches the predicate";
       pred_codewords.insert(i);
-    }
-    else {
-      // LOG(INFO) << cur_string << " does not match the predicate";
     }
   }
   if (pred_codewords.empty()) {
-    eval_complete = true;
-    return Status::OK(); 
+    ctx->eval_complete() = true;
+    return Status::OK();
   }
 
   BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
   // d_bptr->SeekToPositionInBlock(0);
   // Copy the words of the data block into a buffer so that we can easily access the UINT32s
   
-  // O(w*l), w: number of words, l: length of each word
-  // Uses BShufBlockDecoder APIs to put data into codeword_buf_
+  // Load the rows' codewords into a buffer for scanning
   codeword_buf_.resize(n*sizeof(uint32_t));
   d_bptr->CopyNextValuesToArray(&n, codeword_buf_.data());
-  // Load the codewords into a buffer
-  
-  
-  // O(n)
+  // O(n log d) for ordered set
   // iterate through the data and check which satisfy the predicate
   // regardless of whether it satisfies, put it to the output buffer
   auto end = pred_codewords.end();
@@ -358,11 +353,8 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(const ColumnPredicate& pred,
     out++;
     
     if (pred_codewords.find(codeword) != end) {
-      BitmapSet(sel->mutable_bitmap(), offset+i);
+      BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
     }
-    // else {
-    //   BitmapClear(sel->mutable_bitmap(), offset+i);
-    // }
   }
   offset += n;
   return Status::OK();
