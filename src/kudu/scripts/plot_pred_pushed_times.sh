@@ -1,11 +1,9 @@
 #!/bin/bash -xe
-
-NUM_SAMPLES=${NUM_SAMPLES:-10}
+NUM_SAMPLES=10
+LOG_DIR_NAME="build/release/test-logs"
+BASE_DIR="../../.."
 LOGDIR="$BASE_DIR/$LOG_DIR_NAME"
-LOG_DIR_NAME=build/latest/bench-logs
-for i in $(seq 1 $NUM_SAMPLES); 
-  log=$LOGDIR/${PREDPUSHED_TEST}$i
-  KUDU_ALLOW_SLOW_TESTS=true ./build/latest/bin/tablet-decoder-eval-test \
-    --gtest_filter=* &> $log.log
-  real=`grep "Time spent Filtering by string value:" $log | ./parse_real_out.sh`
-done 
+KUDU_ALLOW_SLOW_TESTS=true
+log=$LOGDIR/tablet-decoder-eval-test.txt
+KUDU_ALLOW_SLOW_TESTS=true ../../../build/release/bin/tablet-decoder-eval-test \
+  --gtest_filter=* &> $log

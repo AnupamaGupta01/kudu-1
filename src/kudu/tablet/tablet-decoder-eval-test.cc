@@ -37,16 +37,13 @@ public:
     KuduTabletTest::SetUp();
   }
 
-  void FillTestTablet(const size_t strlen, const size_t cardinality) {
+  void FillTestTablet(const size_t nrows, const size_t strlen, const size_t cardinality) {
     RowBuilder rb(client_schema_);
-    nrows_ = 100000;
-    if (AllowSlowTests()) {
-        nrows_ = 100000;
-    }
+
     // Create new tablet/replace old tablet
     LocalTabletWriter writer(tablet().get(), &client_schema_);
     KuduPartialRow row(&client_schema_);
-    for (int64_t i = 0; i < nrows_; i++) {
+    for (int64_t i = 0; i < nrows; i++) {
       CHECK_OK(row.SetInt32(0, i));
       CHECK_OK(row.SetInt32(1, i * 10));
       CHECK_OK(row.SetStringCopy(2, StringPrintf(("%0"+std::to_string(strlen) + PRId64).c_str(), i % cardinality)));
@@ -61,7 +58,7 @@ public:
     }
 
   }
-  void TestTimedScanAndFilter(const size_t pred_upper, const size_t strlen, const size_t cardinality) {
+  void TestTimedScanAndFilter(const size_t nrows, const size_t pred_upper, const size_t strlen, const size_t cardinality) {
     Arena arena(128, 1028);
     AutoReleasePool pool;
     ScanSpec spec;
@@ -74,10 +71,10 @@ public:
     spec.AddPredicate(string_pred);
     spec.OptimizeScan(schema_, &arena, &pool, true);
     ScanSpec orig_spec = spec;
-    FillTestTablet(strlen, cardinality);
+    FillTestTablet(nrows, strlen, cardinality);
     size_t expected_sel_count = pred_upper > cardinality ?
-                                nrows_ :
-                                (nrows_ / cardinality) * pred_upper + std::min(nrows_ % cardinality, pred_upper);
+                                nrows :
+                                (nrows / cardinality) * pred_upper + std::min(nrows % cardinality, pred_upper);
     gscoped_ptr<RowwiseIterator> iter;
     ASSERT_OK(tablet()->NewRowIterator(client_schema_, &iter));
     spec = orig_spec;
@@ -89,7 +86,8 @@ public:
 //      ASSERT_OK(SilentIterateToStringList(iter.get(), fetched));
       ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
     }
-    LOG(INFO) << "Cardinality: " << cardinality << ", strlen: " << strlen << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
+    LOG(INFO) << "Nrows: " << nrows <<  "Cardinality: " << cardinality << ", strlen: " << strlen << ", Expected: " << \
+      expected_sel_count << ", Actual: " << fetched;
     ASSERT_EQ(expected_sel_count, fetched);
 
     int expected_blocks_from_disk;
@@ -118,7 +116,7 @@ public:
           // If AllowSlowTests() is false, then all of the data fits
           // into a single cfile.
           expected_blocks_from_disk = 1;
-          expected_rows_from_disk = nrows_;
+          expected_rows_from_disk = nrows;
         }
         break;
     }
@@ -133,18 +131,21 @@ public:
   }
 
 private:
-  size_t nrows_;
+//  size_t nrows_;
 };
 
 
 TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
   // Performs a scan on the data with bounds string( [0,21) )
+  const std::vector<const size_t> nrows = {1000000};//, 5000, 10000, 50000, 100000, 500000, 1000000};
   const std::vector<const size_t> cardinalities = {2, 4, 6, 8, 10, 15, 20, 30, 40, 80, 100, 200, 400, 600, 800, 1000};
   const std::vector<const size_t> strlens = {8, 16, 24, 32, 40, 48, 56, 64};
-  for (const size_t crd : cardinalities) {
-    for (const size_t strlen : strlens) {
-      TestTimedScanAndFilter(21, strlen, crd);
-      SetUpTestTablet();
+  for (const size_t r: nrows) {
+    for (const size_t crd : cardinalities) {
+      for (const size_t strlen : strlens) {
+        TestTimedScanAndFilter(r, 21, strlen, crd);
+        SetUpTestTablet();
+      }
     }
   }
 }
