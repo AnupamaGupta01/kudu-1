@@ -96,7 +96,7 @@ class BinaryDictBlockBuilder : public BlockBuilder {
   const WriterOptions* options_;
 
   gscoped_ptr<BlockBuilder> data_builder_;
-//  gscoped_ptr<BlockBuilder> sort_builder_;
+  gscoped_ptr<BlockBuilder> sort_builder_;
 
   // dict_block_, dictionary_, dictionary_strings_arena_
   // is related to the dictionary block (one per cfile).
@@ -168,7 +168,7 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   BinaryPlainBlockDecoder* dict_decoder_;
 
   gscoped_ptr<BlockDecoder> data_decoder_;
-//  gscoped_ptr<BShufBlockDecoder<UINT32>> sort_decoder_;
+  gscoped_ptr<BShufBlockDecoder<UINT32>> sort_decoder_;
 
   // codeword_ranking_[i] > codeword_ranking_[j] implies the codeword[i] > codeword[j]
   // may need to do some sorting or access an extra block to get the ordering
