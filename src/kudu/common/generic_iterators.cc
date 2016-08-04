@@ -55,10 +55,7 @@ namespace kudu {
 
 // TODO: size by bytes, not # rows
 static const int kMergeRowBuffer = 1000;
-// @andrwng
-static string LogPrefix() {
-  return strings::Substitute("T $0 ", "generic_iterators");
-}
+
 // MergeIterState wraps a RowwiseIterator for use by the MergeIterator.
 // Importantly, it also filters out unselected rows from the wrapped RowwiseIterator,
 // such that all returned rows are valid.
@@ -672,11 +669,7 @@ bool PredicateEvaluatingIterator::HasNext() const {
 }
 
 Status PredicateEvaluatingIterator::NextBlock(RowBlock *dst) {
-  // This should just be a call to EvalAndMaterializeBlock or PushedPredNextBlock
-  // LOG_WITH_PREFIX(INFO) << "NextBlock() called from PredicateEvaluatingIterator";
-  // RETURN_NOT_OK(base_iter_->PredPushedNextBlock(dst));
-  // This behavior is likely incorrect. The col_idx_predicates_ are owned by this and not base_iter_
-  // instead of a call to NextBlock and then Evaluate, see what we do 
+   RETURN_NOT_OK(base_iter_->NextBlock(dst));
 
   for (const auto& predicate : col_idx_predicates_) {
     int32_t col_idx = dst->schema().find_column(predicate.column().name());
