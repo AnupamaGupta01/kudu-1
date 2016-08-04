@@ -55,10 +55,7 @@ namespace kudu {
 
 // TODO: size by bytes, not # rows
 static const int kMergeRowBuffer = 1000;
-// @andrwng
-static string LogPrefix() {
-  return strings::Substitute("T $0 ", "generic_iterators");
-}
+
 // MergeIterState wraps a RowwiseIterator for use by the MergeIterator.
 // Importantly, it also filters out unselected rows from the wrapped RowwiseIterator,
 // such that all returned rows are valid.
@@ -526,7 +523,6 @@ Status MaterializingIterator::NextBlock(RowBlock* dst) {
   RETURN_NOT_OK(iter_->PrepareBatch(&n));
   dst->Resize(n);
   RETURN_NOT_OK(MaterializeBlock(dst));
-//  RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
   return Status::OK();
@@ -542,7 +538,6 @@ Status MaterializingIterator::PredPushedNextBlock(RowBlock* dst) {
   dst->Resize(n);
 
   // TODO: check whether kudu should be using EvalAndMaterializeBlock
-  //       e.g. the RowBlock is using DICT_ENCODING
   RETURN_NOT_OK(EvalAndMaterializeBlock(dst));
   RETURN_NOT_OK(iter_->FinishBatch());
 
@@ -550,31 +545,29 @@ Status MaterializingIterator::PredPushedNextBlock(RowBlock* dst) {
 }
 
 Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
-  // Materialize the column and call EvalAndScan, which should scan the data with the decoder, 
-  // and return with the data filled out, but the evaluation should not have to depend on the
+  // Materialize the column and call EvalAndMaterializeColumn, which should scan the data with the decoder,
+  // and return with the data filled out, although evaluation should not have to depend on the
   // materialized data
   //
   // This should at worst be equivalent to calling MaterializeColumn and then calling Evaluate
   RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
-  // LOG(INFO) << "EvalAndMaterializeBlock called from MaterializingIterator";
+
   for (const auto& col_pred : col_idx_predicates_) {
     // Materialize the column with the decoder's Evaluate function
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     bool eval_complete = false;
-    // LOG(INFO) << "predicates found" << get<1>(col_pred).ToString()ddcc;
-    // implemented in cfile_set.cc
-    // Call Scan on the iterator such that dst_col gets populated with all the data for the column
-    // and selection_vector is filled out appropriately. If this cannot be done by the iterator, 
-    // eval_complete should be set to false, and Evaluate will be called on the data.
+
     ColumnEvalContext *ctx = new ColumnEvalContext(get<1>(col_pred),
                                                    &dst_col,
                                                    dst->selection_vector(),
                                                    eval_complete);
+    // implemented in cfile_set.cc
+    // Call Scan on the iterator such that dst_col gets populated with all the data for the column
+    // and selection_vector is filled out appropriately. If this cannot be done by the iterator,
+    // eval_complete should be set to false, and Evaluate will be called on the data.
     RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(get<0>(col_pred), ctx));
-    // If the evaluation was not completed, call Evaluate
-    // This would happen if we're looking at things other than Equality/Range queries
+
     if (!eval_complete) {
-      // LOG(INFO) << "Manually evaluate predicate on the dst_col";
       RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
       get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
     }
@@ -584,7 +577,6 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     }
   }
   for (size_t col_idx : non_predicate_column_indexes_) {
-    // LOG(INFO) << "non-predicates found" << col_idx;
     // Materialize the column itself into the row block.
     ColumnBlock dst_col(dst->column_block(col_idx));
     RETURN_NOT_OK(iter_->MaterializeColumn(col_idx, &dst_col));
@@ -604,8 +596,6 @@ Status MaterializingIterator::MaterializeBlock(RowBlock *dst) {
     // Materialize the column itself into the row block.
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     RETURN_NOT_OK(iter_->MaterializeColumn(get<0>(col_pred), &dst_col));
-    // this call to MaterializeColumn could be FetchDecoders
-    
 
     // Evaluate the column predicate.
     get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
@@ -679,11 +669,7 @@ bool PredicateEvaluatingIterator::HasNext() const {
 }
 
 Status PredicateEvaluatingIterator::NextBlock(RowBlock *dst) {
-  // This should just be a call to EvalAndMaterializeBlock or PushedPredNextBlock
-  // LOG_WITH_PREFIX(INFO) << "NextBlock() called from PredicateEvaluatingIterator";
-  // RETURN_NOT_OK(base_iter_->PredPushedNextBlock(dst));
-  // This behavior is likely incorrect. The col_idx_predicates_ are owned by this and not base_iter_
-  // instead of a call to NextBlock and then Evaluate, see what we do 
+   RETURN_NOT_OK(base_iter_->NextBlock(dst));
 
   for (const auto& predicate : col_idx_predicates_) {
     int32_t col_idx = dst->schema().find_column(predicate.column().name());
