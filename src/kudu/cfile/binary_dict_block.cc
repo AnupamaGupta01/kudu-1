@@ -43,7 +43,6 @@ BinaryDictBlockBuilder::BinaryDictBlockBuilder(const WriterOptions* options)
     dict_block_(options_),
     dictionary_strings_arena_(1024, 32*1024*1024),
     mode_(kCodeWordMode) {
-//  sort_builder_.reset(new BShufBlockBuilder<UINT32>(options_));
   data_builder_.reset(new BShufBlockBuilder<UINT32>(options_));
   Reset();
 }
@@ -57,10 +56,8 @@ void BinaryDictBlockBuilder::Reset() {
       dict_block_.IsBlockFull(options_->storage_attributes.cfile_block_size)) {
     mode_ = kPlainBinaryMode;
     data_builder_.reset(new BinaryPlainBlockBuilder(options_));
-//    sort_builder_.reset();
   } else {
     data_builder_->Reset();
-//    sort_builder_->Reset();
   }
   finished_ = false;
 }
@@ -73,18 +70,6 @@ Slice BinaryDictBlockBuilder::Finish(rowid_t ordinal_pos) {
   // avoid an extra memory copy (buffer_.append(..))
   Slice data_slice = data_builder_->Finish(ordinal_pos);
   buffer_.append(data_slice.data(), data_slice.size());
-
-//  InlineEncodeFixed32(&buffer_[4], data_slice.size());
-//  // Iterate through the sorted codewords and Add each of them to the sort_builder
-//  uint32_t i = 0;
-//  for (auto iter =  dictionary_.begin(); iter != dictionary_.end(); iter++) {
-//    if (sort_builder_->Add(reinterpret_cast<const uint8_t*>(iter->second), 1) == 0) {
-//      break;
-//    }
-//    i++;
-//  }
-//  Slice sort_slice = sort_builder_->Finish(i);
-//  buffer_.append(sort_slice.data(), sort_slice.size());
 
   return Slice(buffer_);
 }
@@ -210,10 +195,6 @@ Status BinaryDictBlockDecoder::ParseHeader() {
     return Status::Corruption("header Mode information corrupted");
   }
 
-//  uint32_t data_slice_size = DecodeFixed32(&data_[4]);
-
-
-  // Slice content(data_.data() + 8, data_slice_size);
   Slice content(data_.data() + 4, data_.size() - 4);
   if (mode_ == kCodeWordMode) {
     data_decoder_.reset(new BShufBlockDecoder<UINT32>(content));
@@ -224,18 +205,7 @@ Status BinaryDictBlockDecoder::ParseHeader() {
     data_decoder_.reset(new BinaryPlainBlockDecoder(content));
   }
 
-//  Slice sort_content(data_.data() + 8 + data_slice_size, data_.size() - 8 - data_slice_size);
-//  if (mode_ == kCodeWordMode) {
-//    sort_decoder_.reset(new BShufBlockDecoder<UINT32>(sort_content));
-//  } else {
-//    if (mode_ != kPlainBinaryMode) {
-//      return Status::Corruption("Unrecognized Dictionary encoded sort block header");
-//    }
-//    sort_decoder_.reset();
-//  }
-
   RETURN_NOT_OK(data_decoder_->ParseHeader());
-//  RETURN_NOT_OK(sort_decoder_->ParseHeader());
   parsed_ = true;
   return Status::OK();
 }
@@ -267,57 +237,6 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
   }
 }
 
-uint32_t BinaryDictBlockDecoder::word_at_index(uint32_t index) {
-//  sort_decoder_->SeekToPositionInBlock(index);
-  uint32_t ret;
-  size_t one = 1;
-//  sort_decoder_->CopyNextValuesToArray(&one, reinterpret_cast<uint8_t *>(&ret));
-  return ret;
-}
-
-Status BinaryDictBlockDecoder::SeekAtOrAfterDictValue(const void* value_void, bool* exact, uint32_t& codeword) {
-//  DCHECK(value_void != nullptr);
-//
-//  const Slice &target = *reinterpret_cast<const Slice *>(value_void);
-//
-//  // Binary search in restart array to find the first restart point
-//  // with a key >= target
-//  codeword = 0;
-//  int32_t left = 0;
-//  int32_t right = sort_decoder_->Count();
-//  while (left != right) {
-//    // referring to the middle of the sorted codewords
-//    uint32_t mid = (left + right) / 2;
-////    sort_decoder_->SeekToPositionInBlock(mid);
-////
-////    // referring to the codeword
-////    uint32_t mid_codeword;
-////    size_t one = 1;
-////    sort_decoder_->CopyNextValuesToArray(&one, reinterpret_cast<uint8_t *>(&mid_codeword));
-//    uint32_t mid_codeword = word_at_index(mid);
-//    // TODO: do this to cur_idx before returning so we can get the codeword rather than the index in sort_decoder_
-//
-//    // referring to the string corresponding to the middle
-//    Slice mid_key(dict_decoder_->string_at_index(mid_codeword));
-//    int c = mid_key.compare(target);
-//    if (c < 0) {
-//      left = mid + 1;
-//    } else if (c > 0) {
-//      right = mid;
-//    } else {
-//      codeword = mid_codeword;
-//      *exact = true;
-//      return Status::OK();
-//    }
-//  }
-//  *exact = false;
-//  codeword = word_at_index(left);
-//  if (left == sort_decoder_->Count()) {
-//    codeword = sort_decoder_->Count();
-//  }
-  return Status::OK();
-}
-
 static bool CompareRange(Slice& str, Slice& lower, Slice& upper, bool equality) {
 //static bool CompareRange(void *str, void *lower, void *upper, bool equality) {
   // will return true only if str is between [lower, upper)
@@ -345,7 +264,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
                                                  size_t& n,
                                                  ColumnDataView* dst) {
   std::set<uint32_t> pred_codewords;
-//  std::unordered_set<uint32_t, std::hash<uint32_t>> pred_codewords;
+  //  std::unordered_set<uint32_t, std::hash<uint32_t>> pred_codewords;
   Slice lower, upper;
 
   // Set up the upper and lower bound slices, empty bound is set to empty Slice()
@@ -399,25 +318,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     return Status::OK();
   }
 
-//  // Get the codewords for upper and lower (if they exist, else get nearest after)
-//  // O(log d)
-//  // This will give a bound on the rankings
-//  // Given a codeword, check its ranking and see if it is within bound
-//  bool upper_exact, lower_exact = false;
-//  uint32_t lower_codeword, upper_codeword;
-//  std::vector<uint32_t> ranked_dict;
-//  ranked_dict.resize(sort_decoder_->Count());
-//
-//  // Rank the codewords:
-//  //    ranked_dict[0] = 5 means that codeword 0 is 5th lowest (6th, base 0)
-//  for (uint32_t i = 0; i < ranked_dict.size(); i++) {
-//    // word_at_index returns the ith highest codeword (by string), word_at_index(0) has the lowest string
-//    uint32_t ith = word_at_index(i);
-//    ranked_dict[ith] = i;
-//  }
-//  SeekAtOrAfterDictValue(ctx->pred().raw_lower(), &lower_exact, lower_codeword);
-//  SeekAtOrAfterDictValue(ctx->pred().raw_upper(), &upper_exact, upper_codeword);
-
   BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
 
   // Copy the words of the data block into a buffer so that we can easily access the UINT32s
@@ -439,8 +339,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     CHECK(out_arena->RelocateSlice(elem, out));
     out++;
 
-    // TODO: compare [ ranked_dict(pred.lower()), ranked_dict(pred.upper()) ) and ranked_dict(codeword)
-    //    ranked_dict[lower_codeword] < ranked_dict[codeword]
     // O(log d)
     if (pred_codewords.find(codeword) != end) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
@@ -452,7 +350,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
 
 // Overall process is O(n) where n is the number of strings to decode
 Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* dst) {
-  // LOG(INFO) << "CopyNextDecodeStrings called";
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);
   DCHECK_LE(*n, dst->nrows());
@@ -478,7 +375,6 @@ Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* 
 }
 
 Status BinaryDictBlockDecoder::CopyNextValues(size_t* n, ColumnDataView* dst) {
-  // LOG(INFO) << "CopyNextValues called";
   if (mode_ == kCodeWordMode) {
     return CopyNextDecodeStrings(n, dst);
   } else {
