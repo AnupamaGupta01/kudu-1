@@ -285,7 +285,6 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterDictValue(const void* value_void, bo
   DCHECK(value_void != nullptr);
 
   const Slice &target = *reinterpret_cast<const Slice *>(value_void);
-//  LOG(INFO) << "Searching for " << target.data();
 
   // Binary search in restart array to find the first restart point
   // with a key >= target
@@ -307,64 +306,24 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterDictValue(const void* value_void, bo
     } else {
       codeword = mid_codeword;
       *exact = true;
-//      LOG(INFO) << "Found! That's codeword: " << mid_codeword;
       return Status::OK();
     }
   }
   *exact = false;
   if (left == sort_decoder_->Count()) {
     codeword = sort_decoder_->Count();
-//    LOG(INFO) << "Not found!";
     return Status::OK();
   }
   codeword = word_at_index(left);
   return Status::OK();
 }
 
-static bool CompareRange(Slice& str, Slice& lower, Slice& upper, bool equality) {
-//static bool CompareRange(void *str, void *lower, void *upper, bool equality) {
-  // will return true only if str is between [lower, upper)
-  if (equality) {
-    // this is an equality predicate
-    return str.compare(lower) == 0;
-  }
-  if (upper.empty()) {
-    // this is a lower bound
-    return str.compare(lower) >= 0;
-  }
-  else if (lower.empty()) {
-    // this is an upper bound
-    return str.compare(upper) < 0;
-  }
-  else {
-    // both bounds exist, get stuff between them
-    return str.compare(upper) < 0 && str.compare(lower) >= 0;
-  }
-}
 
 // 
 Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
                                                  size_t& offset,
                                                  size_t& n,
                                                  ColumnDataView* dst) {
-  std::set<uint32_t> pred_codewords;
-//  std::unordered_set<uint32_t, std::hash<uint32_t>> pred_codewords;
-  Slice lower, upper;
-
-  // Set up the upper and lower bound slices, empty bound is set to empty Slice()
-  if (ctx->pred().raw_lower() != nullptr) {
-    lower = *reinterpret_cast<const Slice*>(ctx->pred().raw_lower());
-  }
-  else {
-    lower = Slice();
-  }
-  if (ctx->pred().raw_upper() != nullptr) {
-    upper = *reinterpret_cast<const Slice*>(ctx->pred().raw_upper());
-  }
-  else {
-    upper = Slice();
-  }
-
 
   // Set eval_complete depending on the predicate type
   switch (ctx->pred().predicate_type()) {
@@ -384,25 +343,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   // TODO: determine a heuristic for when to short-circuit
   // f(nwords, nrows, avg_strlen)
   // - avg_strlen can be substituted with size_estimate, since avg_strlen ~ size_estimate/nwords
-  // TODO: if dict_decoder_ is reading directly from file, should pull into memory and evaluate with cached copy
   // TODO: kPlainBinaryMode should call data_decoder->CopyNextValues(dst)
-
-  // Scan through the entries in the dictionary and determine which satisfy the predicate
-
-
-  // O(d log d) Sorted
-  // O(d * C) Unsorted
-//  for (size_t i = 0; i < nwords; i++) {
-//    Slice cur_string = dict_decoder_->string_at_index(i);
-//    // Store the codewords that satisfy the predicate to some storage (set, unordered_set, etc.)
-//    if (CompareRange(cur_string, lower, upper, ctx->pred().predicate_type() == PredicateType::Equality)) {
-//      pred_codewords.insert(i);
-//    }
-//  }
-//  if (pred_codewords.empty()) {
-//    ctx->eval_complete() = true;
-//    return Status::OK();
-//  }
 
   // Get the codewords for upper and lower (if they exist, else get nearest after)
   // O(log d)
@@ -438,9 +379,8 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   if (ctx->pred().raw_lower() != nullptr) {
     SeekAtOrAfterDictValue(ctx->pred().raw_lower(), &lower_exact, lower_codeword);
     lower_rank = ranked_dict[lower_codeword];
-  }  // raw_lower() == nullptr? lower_codeword: sorted_dict[0]
+  }
   else {
-    // lower rank = 0
     lower_rank = 0;
   }
   if (ctx->pred().raw_upper() != nullptr) {
@@ -448,7 +388,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     upper_rank = ranked_dict[upper_codeword];
   }
   else {
-    // upper rank = Count
     upper_rank = ranked_dict.size();
   }
 
@@ -462,7 +401,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   // O(n log d) for ordered set
   // iterate through the data and check which satisfy the predicate
   // regardless of whether it satisfies, put it to the output buffer
-  auto end = pred_codewords.end();
   Slice* out = reinterpret_cast<Slice*>(dst->data());
   Arena* out_arena = dst->arena();
   for (size_t i = 0; i < n; i++) {
@@ -478,12 +416,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     else if (ranked_dict[codeword] >= lower_rank && ranked_dict[codeword] < upper_rank) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
     }
-    // TODO: compare [ ranked_dict(pred.lower()), ranked_dict(pred.upper()) ) and ranked_dict(codeword)
-    //    ranked_dict[lower_codeword] < ranked_dict[codeword]
-    // O(log d)
-    //    if (pred_codewords.find(codeword) != end) {
-    //      BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
-    //    }
   }
   offset += n;
   return Status::OK();
@@ -491,7 +423,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
 
 // Overall process is O(n) where n is the number of strings to decode
 Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* dst) {
-  // LOG(INFO) << "CopyNextDecodeStrings called";
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);
   DCHECK_LE(*n, dst->nrows());
@@ -517,7 +448,6 @@ Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* 
 }
 
 Status BinaryDictBlockDecoder::CopyNextValues(size_t* n, ColumnDataView* dst) {
-  // LOG(INFO) << "CopyNextValues called";
   if (mode_ == kCodeWordMode) {
     return CopyNextDecodeStrings(n, dst);
   } else {
