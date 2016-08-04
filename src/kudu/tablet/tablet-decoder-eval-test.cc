@@ -108,9 +108,7 @@ TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
   }
 }
 
-
 INSTANTIATE_TEST_CASE_P(AllDisk, TabletDecoderEvalTest, ::testing::Values(ALL_ON_DISK));
-
 
 }   // tablet
 }   // kudu

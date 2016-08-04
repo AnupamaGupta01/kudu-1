@@ -165,7 +165,7 @@ TEST_P(PredicatePushdownTest, LowCardinalityBenchmark) {
 
 // INSTANTIATE_TEST_CASE_P(AllMemory, PredicatePushdownTest, ::testing::Values(ALL_IN_MEMORY));
 // INSTANTIATE_TEST_CASE_P(SplitMemoryDisk, PredicatePushdownTest, ::testing::Values(SPLIT_MEMORY_DISK));
-INSTANTIATE_TEST_CASE_P(AllDisk, PredicatePushdownTest, ::testing::Values(ALL_ON_DISK));
+// INSTANTIATE_TEST_CASE_P(AllDisk, PredicatePushdownTest, ::testing::Values(ALL_ON_DISK));
 // INSTANTIATE_TEST_CASE_P(AllDisk, EvalPredicatePushdown, ::testing::Values(ALL_ON_DISK));
 } // namespace cfile
 } // namespace kudu

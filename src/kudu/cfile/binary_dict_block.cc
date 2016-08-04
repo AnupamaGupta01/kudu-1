@@ -274,6 +274,7 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
 }
 
 uint32_t BinaryDictBlockDecoder::word_at_index(uint32_t index) {
+  // TODO: there must be a cleaner way to do this. Perhaps add a pointer into bshuf_block
   sort_decoder_->SeekToPositionInBlock(index);
   uint32_t ret;
   size_t one = 1;
@@ -318,13 +319,10 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterDictValue(const void* value_void, bo
   return Status::OK();
 }
 
-
-// 
 Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
                                                  size_t& offset,
                                                  size_t& n,
                                                  ColumnDataView* dst) {
-
   // Set eval_complete depending on the predicate type
   switch (ctx->pred().predicate_type()) {
     case PredicateType::None:
