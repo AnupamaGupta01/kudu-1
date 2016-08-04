@@ -197,7 +197,8 @@ Status BinaryDictBlockBuilder::GetFirstKey(void* key_void) const {
 
 BinaryDictBlockDecoder::BinaryDictBlockDecoder(Slice slice, CFileIterator* iter)
     : data_(std::move(slice)),
-      parsed_(false) {
+      parsed_(false),
+      prepared_(false) {
   dict_decoder_ = iter->GetDictDecoder();
 }
 
@@ -318,26 +319,12 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterDictValue(const void* value_void, bo
   codeword = word_at_index(left);
   return Status::OK();
 }
-
-Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
-                                                 size_t& offset,
-                                                 size_t& n,
-                                                 ColumnDataView* dst) {
+void BinaryDictBlockDecoder::PrepareScan(ColumnEvalContext *ctx) {
   // Set eval_complete depending on the predicate type
-  switch (ctx->pred().predicate_type()) {
-    case PredicateType::None:
-      ctx->eval_complete() = true;
-      return Status::OK();
-    case PredicateType::IsNotNull:
-      ctx->eval_complete() = false;
-      return Status::OK();
-    case PredicateType::Range:
-    case PredicateType::Equality:
-      ctx->eval_complete() = true;
-      break;
+  if (prepared_) {
+    return;
   }
 
-  size_t nwords = dict_decoder_->Count();
   // TODO: determine a heuristic for when to short-circuit
   // f(nwords, nrows, avg_strlen)
   // - avg_strlen can be substituted with size_estimate, since avg_strlen ~ size_estimate/nwords
@@ -348,16 +335,16 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   // This will give a bound on the rankings
   // Given a codeword, check its ranking and see if it is within bound
   bool upper_exact, lower_exact = false;
-  uint32_t lower_codeword, upper_codeword;
-  std::vector<uint32_t> ranked_dict;
-  ranked_dict.resize(sort_decoder_->Count());
+  uint32_t lower_codeword, upper_codeword = 0;
+  ranked_dict_.resize(sort_decoder_->Count());
+
 
   // Rank the codewords:
   //    ranked_dict[0] = 5 means that codeword 0 is 5th lowest (6th, base 0)
-  for (uint32_t i = 0; i < ranked_dict.size(); i++) {
+  for (uint32_t i = 0; i < ranked_dict_.size(); i++) {
     // word_at_index returns the ith highest codeword (by string), word_at_index(0) has the lowest string
     uint32_t ith = word_at_index(i);
-    ranked_dict[ith] = i;
+    ranked_dict_[ith] = i;
   }
   // CASES:
   //  both found
@@ -371,23 +358,58 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   //  upper found, lower not found
   //  upper found, lower null
   //    upperrank: upper, lowerrank: 0
-  uint32_t lower_rank, upper_rank;
 
-  // if equality, only check the raw_lower
+  // if equality, only check the raw_lower, or set upper_rank_(lower_rank_+1)
   if (ctx->pred().raw_lower() != nullptr) {
     SeekAtOrAfterDictValue(ctx->pred().raw_lower(), &lower_exact, lower_codeword);
-    lower_rank = ranked_dict[lower_codeword];
+    lower_rank_ = ranked_dict_[lower_codeword];
+    if (lower_codeword == ranked_dict_.size()) {
+      // lower bound was too great
+      lower_rank_ = lower_codeword;
+    }
   }
   else {
-    lower_rank = 0;
+    lower_rank_ = 0;
   }
+  LOG(INFO) << ranked_dict_.size();
   if (ctx->pred().raw_upper() != nullptr) {
     SeekAtOrAfterDictValue(ctx->pred().raw_upper(), &upper_exact, upper_codeword);
-    upper_rank = ranked_dict[upper_codeword];
+    upper_rank_ = ranked_dict_[upper_codeword];
+    if (upper_codeword == ranked_dict_.size()) {
+      // upper bound larger than the largest element
+      upper_rank_ = upper_codeword;
+    }
   }
   else {
-    upper_rank = ranked_dict.size();
+    upper_rank_ = ranked_dict_.size();
   }
+  LOG(INFO) << "Lower codeword: " << lower_codeword << ", Upper codeword: " << upper_codeword;
+  LOG(INFO) << "Lower rank: " << lower_rank_<< ", Upper rank: " << upper_rank_;
+  prepared_ = true;
+}
+
+Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
+                                                 size_t& offset,
+                                                 size_t& n,
+                                                 ColumnDataView* dst) {
+  switch (ctx->pred().predicate_type()) {
+    case PredicateType::None:
+      ctx->eval_complete() = true;
+      return Status::OK();
+    case PredicateType::IsNotNull:
+      ctx->eval_complete() = false;
+      return Status::OK();
+    case PredicateType::Range:
+    case PredicateType::Equality:
+      ctx->eval_complete() = true;
+      break;
+  }
+
+  // Prepare the upper and lower codeword bounds
+  PrepareScan(ctx);
+  // check if should short circuit
+
+  //  size_t nwords = dict_decoder_->Count();
 
   BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
 
@@ -408,10 +430,10 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     Slice elem = dict_decoder_->string_at_index(codeword);
     CHECK(out_arena->RelocateSlice(elem, out));
     out++;
-    if (ctx->pred().predicate_type() == PredicateType::Equality && ranked_dict[codeword] == lower_rank) {
+    if (ctx->pred().predicate_type() == PredicateType::Equality && ranked_dict_[codeword] == lower_rank_) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
     }
-    else if (ranked_dict[codeword] >= lower_rank && ranked_dict[codeword] < upper_rank) {
+    else if (ranked_dict_[codeword] >= lower_rank_ && ranked_dict_[codeword] < upper_rank_) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
     }
   }

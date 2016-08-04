@@ -130,7 +130,6 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   virtual Status ParseHeader() OVERRIDE;
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
   virtual Status SeekAtOrAfterValue(const void* value, bool* exact_match) OVERRIDE;
-  Status SeekToWord(const void* word, bool* exact_match);
   Status SeekAtOrAfterDictValue(const void* word, bool* exact_match, uint32_t& idx);
   Status CopyNextValues(size_t* n, ColumnDataView* dst) OVERRIDE;
 
@@ -161,8 +160,13 @@ class BinaryDictBlockDecoder : public BlockDecoder {
  private:
   Status CopyNextDecodeStrings(size_t* n, ColumnDataView* dst);
   uint32_t word_at_index(uint32_t index);
+  void PrepareScan(ColumnEvalContext *ctx);
   Slice data_;
+  uint32_t lower_rank_;
+  uint32_t upper_rank_;
+  std::vector<uint32_t> ranked_dict_;
   bool parsed_;
+  bool prepared_;
 
   // Dictionary block decoder
   BinaryPlainBlockDecoder* dict_decoder_;

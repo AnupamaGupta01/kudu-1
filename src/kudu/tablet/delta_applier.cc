@@ -96,12 +96,12 @@ Status DeltaApplier::InitializeSelectionVector(SelectionVector *sel_vec) {
 
 Status DeltaApplier::EvalAndMaterializeColumn(size_t col_idx,
                                               ColumnEvalContext *ctx) {
-//    RETURN_NOT_OK(base_iter_->EvalAndMaterializeColumn(col_idx, ctx));
   DCHECK(!first_prepare_) << "PrepareBatch() must be called at least once";
-  ctx->sel()->SetAllTrue();
-  RETURN_NOT_OK(base_iter_->MaterializeColumn(col_idx, ctx->block()));
-  RETURN_NOT_OK(delta_iter_->ApplyUpdates(col_idx, ctx->block()));
-  ctx->eval_complete() = false;
+  RETURN_NOT_OK(base_iter_->EvalAndMaterializeColumn(col_idx, ctx));
+//  ctx->sel()->SetAllTrue();
+//  RETURN_NOT_OK(base_iter_->MaterializeColumn(col_idx, ctx->block()));
+//  RETURN_NOT_OK(delta_iter_->ApplyUpdates(col_idx, ctx->block()));
+//  ctx->eval_complete() = false;
 
   return Status::OK();
   // TODO: apply the updates to the column and to the selection vector

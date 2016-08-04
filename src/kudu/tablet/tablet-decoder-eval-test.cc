@@ -95,8 +95,9 @@ public:
 
 TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
   // Performs a scan on the data with bounds string( [0,21) )
-  std::vector<size_t> nrows = {1000000};//, 5000, 10000, 50000, 100000, 500000, 1000000};
-  std::vector<size_t> cardinalities = {2, 4, 6, 8, 10, 15, 20, 30, 40, 80, 100, 200, 400, 600, 800, 1000};
+  std::vector<size_t> nrows = {100000};//, 5000, 10000, 50000, 100000, 500000, 1000000};
+//  std::vector<size_t> cardinalities = {2, 4, 6, 8, 10, 15, 20, 30, 40, 80, 100, 200, 400, 600, 800, 1000};
+  std::vector<size_t> cardinalities = {24};
   std::vector<size_t> strlens = {8, 16, 24, 32, 40, 48, 56, 64};
   for (const size_t r: nrows) {
     for (const size_t crd : cardinalities) {

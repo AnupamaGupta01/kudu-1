@@ -900,20 +900,7 @@ Status CFileIterator::FinishBatch() {
   return Status::OK();
 }
 
-// std::vector<PreparedBlock> CFileIterator::GetBlocks(bool& is_nullable) {
-//   // Rather than going through this Scan()
-//   // 
-//   // TODO: all the checks in Scan
-//   CHECK(seeked_) << "not seeked";
-//   is_nullable = reader_->is_nullable();
-//   return &prepared_blocks_;
-// }
-
 Status CFileIterator::Scan(ColumnBlock *dst) {
-// Status CFileIterator::Scan(ColumnPredicate pred,
-//                            ColumnBlock *dst,
-//                            SelectionVector *sel,
-//                            bool& eval_complete) {
   CHECK(seeked_) << "not seeked";
   // LOG(INFO) << "Scan called from CFileIterator";
 
@@ -1004,7 +991,6 @@ Status CFileIterator::Scan(ColumnBlock *dst) {
 
 Status CFileIterator::Scan(ColumnEvalContext *ctx) {
   CHECK(seeked_) << "not seeked";
-  // LOG(INFO) << "Pushed Scan called from CFileIterator";
 
   // Use a column data view to been able to advance it as we read into it.
   ColumnDataView remaining_dst(ctx->block());
@@ -1016,8 +1002,6 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
   ctx->sel()->SetAllFalse();
   size_t offset = 0;
   for (PreparedBlock *pb : prepared_blocks_) {
-    // LOG(INFO) << "NULLABLE EVALUATION-2";
-
     if (pb->needs_rewind_) {
       // Seek back to the saved position.
       SeekToPositionInBlock(pb, pb->rewind_idx_);
@@ -1043,7 +1027,6 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
         size_t this_batch = nblock;
         if (not_null) {
           // TODO: Maybe copy all and shift later?
-          // RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
           RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(ctx, offset, this_batch, &remaining_dst));
           DCHECK_EQ(nblock, this_batch);
           pb->needs_rewind_ = true;
@@ -1053,6 +1036,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
                                      remaining_dst.stride() * nblock,
                                      "NULLNULLNULLNULLNULL");
 #endif
+          offset += this_batch;
         }
 
         // Set the ColumnBlock bitmap
@@ -1066,13 +1050,10 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
     } else {
       // Fetch as many as we can from the current datablock.
       size_t this_batch = rem;
-      // LOG(INFO) << "NOTNULLABLE AY";
-      // RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
 
       // Write the block to the remaining_dst, optionally writing to sel
       // If sel gets written to, eval_complete will be set to true
       RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(ctx, offset, this_batch, &remaining_dst));
-
 
       pb->needs_rewind_ = true;
       DCHECK_LE(this_batch, rem);
