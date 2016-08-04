@@ -163,7 +163,10 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   // Dictionary block decoder
   BinaryPlainBlockDecoder* dict_decoder_;
   gscoped_ptr<BlockDecoder> data_decoder_;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 809d7a59d3d5cc0d21fd9aa70b85d670e3b61cdd
   DictEncodingMode mode_;
 
   // buffer to hold the codewords, needed by CopyNextDecodeStrings()
