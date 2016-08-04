@@ -445,7 +445,6 @@ Status CFileSet::Iterator::InitializeSelectionVector(SelectionVector *sel_vec) {
 }
 
 Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
-  // LOG(INFO) << "MaterializeColumn called";
   CHECK_EQ(prepared_count_, dst->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
@@ -455,7 +454,6 @@ Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
 }
 Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
                                                     ColumnEvalContext *ctx) {
-  // LOG(INFO) << "EvalAndMaterializeColumn called from CFileSet::Iterator";
   CHECK_EQ(prepared_count_, ctx->block()->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
@@ -463,15 +461,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
   ColumnIterator* iter = col_iters_[col_idx];
 
   // implemented in cfile_reader.cc
-  // return iter->Scan(dst);
   return iter->Scan(ctx);
-  // alternatively, iter->GetDecoders() to get to the decoders and then call the dblk->EvaluatePredicate
-  // iter->GetDecoders(rle_decoder, std::vector<dblk>)
-  //   rle_decoder: if null, proceed as with Scan::else, otherwise do RLE while loop
-  // 
-  // do the normal Scan() calls and also dblk->EvalPredicate
-  // bool is_nullable;
-  // std::vector<PreparedBlock> prepared_blocks = iter->GetBlocks(is_nullable);
 
 }
 
