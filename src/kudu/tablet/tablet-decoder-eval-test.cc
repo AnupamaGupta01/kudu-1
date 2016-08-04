@@ -89,57 +89,15 @@ public:
     LOG(INFO) << "Nrows: " << nrows <<  "Cardinality: " << cardinality << ", strlen: " << strlen << ", Expected: " << \
       expected_sel_count << ", Actual: " << fetched;
     ASSERT_EQ(expected_sel_count, fetched);
-
-    int expected_blocks_from_disk;
-    int expected_rows_from_disk;
-    bool check_stats = true;
-    switch (GetParam()) {
-      case ALL_IN_MEMORY:
-        expected_blocks_from_disk = 0;
-        expected_rows_from_disk = 0;
-        break;
-      case SPLIT_MEMORY_DISK:
-        expected_blocks_from_disk = 1;
-        expected_rows_from_disk = 206;
-        break;
-      case ALL_ON_DISK:
-        // If AllowSlowTests() is true and all data is on disk
-        // (vs. first 206 rows -- containing the values we're looking
-        // for -- on disk and the rest in-memory), then the number
-        // of blocks and rows we will scan through can't be easily
-        // determined (as it depends on default cfile block size, the
-        // size of cfile header, and how much data each column takes
-        // up).
-        if (AllowSlowTests()) {
-          check_stats = false;
-        } else {
-          // If AllowSlowTests() is false, then all of the data fits
-          // into a single cfile.
-          expected_blocks_from_disk = 1;
-          expected_rows_from_disk = nrows;
-        }
-        break;
-    }
-//    if (check_stats) {
-//      vector<IteratorStats> stats;
-//      iter->GetIteratorStats(&stats);
-//      for (const IteratorStats &col_stats : stats) {
-//        EXPECT_EQ(expected_blocks_from_disk, col_stats.data_blocks_read_from_disk);
-//        EXPECT_EQ(expected_rows_from_disk, col_stats.cells_read_from_disk);
-//      }
-//    }
   }
-
-private:
-//  size_t nrows_;
 };
 
 
 TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
   // Performs a scan on the data with bounds string( [0,21) )
-  const std::vector<const size_t> nrows = {1000000};//, 5000, 10000, 50000, 100000, 500000, 1000000};
-  const std::vector<const size_t> cardinalities = {2, 4, 6, 8, 10, 15, 20, 30, 40, 80, 100, 200, 400, 600, 800, 1000};
-  const std::vector<const size_t> strlens = {8, 16, 24, 32, 40, 48, 56, 64};
+  std::vector<size_t> nrows = {1000000};//, 5000, 10000, 50000, 100000, 500000, 1000000};
+  std::vector<size_t> cardinalities = {2, 4, 6, 8, 10, 15, 20, 30, 40, 80, 100, 200, 400, 600, 800, 1000};
+  std::vector<size_t> strlens = {8, 16, 24, 32, 40, 48, 56, 64};
   for (const size_t r: nrows) {
     for (const size_t crd : cardinalities) {
       for (const size_t strlen : strlens) {
