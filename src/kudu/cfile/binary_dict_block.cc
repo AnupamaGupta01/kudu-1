@@ -176,7 +176,8 @@ Status BinaryDictBlockBuilder::GetFirstKey(void* key_void) const {
 
 BinaryDictBlockDecoder::BinaryDictBlockDecoder(Slice slice, CFileIterator* iter)
     : data_(std::move(slice)),
-      parsed_(false) {
+      parsed_(false),
+      prepared_(false) {
   dict_decoder_ = iter->GetDictDecoder();
 }
 
@@ -258,30 +259,13 @@ static bool CompareRange(Slice& str, Slice& lower, Slice& upper, bool equality) 
   }
 }
 
-struct IntHasher
-{
-  uint32_t operator()(const uint32_t& a_ref) {
-    uint32 a = a_ref;
-    a = (a+0x7ed55d16) + (a<<12);
-    a = (a^0xc761c23c) ^ (a>>19);
-    a = (a+0x165667b1) + (a<<5);
-    a = (a+0xd3a2646c) ^ (a<<9);
-    a = (a+0xfd7046c5) + (a<<3);
-    a = (a^0xb55a4f09) ^ (a>>16);
-    return a;
-  }
-};
 
-
-Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
-                                                 size_t& offset,
-                                                 size_t& n,
-                                                 ColumnDataView* dst) {
-//  std::set<uint32_t> pred_codewords;
-  std::unordered_set<uint32_t, IntHasher> pred_codewords;
-//  std::vector<uint32_t> pred_codewords;
+void BinaryDictBlockDecoder::PrepareScan(ColumnEvalContext *ctx) {
   Slice lower, upper;
-
+  if (prepared_) {
+    return;
+  }
+  size_t nwords = dict_decoder_->Count();
   // Set up the upper and lower bound slices, empty bound is set to empty Slice()
   if (ctx->pred().raw_lower() != nullptr) {
     lower = *reinterpret_cast<const Slice*>(ctx->pred().raw_lower());
@@ -295,7 +279,22 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   else {
     upper = Slice();
   }
+  // O(d log d) Sorted
+  // O(d * C) Unsorted
+  for (size_t i = 0; i < nwords; i++) {
+    Slice cur_string = dict_decoder_->string_at_index(i);
+    // Store the codewords that satisfy the predicate to some storage (set, unordered_set, etc.)
+    if (CompareRange(cur_string, lower, upper, ctx->pred().predicate_type() == PredicateType::Equality)) {
+      pred_codewords_.insert(i);
+    }
+  }
+  prepared_ = true;
+}
 
+Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
+                                                 size_t& offset,
+                                                 size_t& n,
+                                                 ColumnDataView* dst) {
   // Set eval_complete depending on the predicate type
   switch (ctx->pred().predicate_type()) {
     case PredicateType::None:
@@ -310,25 +309,8 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
       break;
   }
 
-  size_t nwords = dict_decoder_->Count();
-  // TODO: determine a heuristic for when to short-circuit
-  // f(nwords, nrows, avg_strlen)
-  // - avg_strlen can be substituted with size_estimate, since avg_strlen ~ size_estimate/nwords
-  // TODO: if dict_decoder_ is reading directly from file, should pull into memory and evaluate with cached copy
-  // TODO: kPlainBinaryMode should call data_decoder->CopyNextValues(dst)
-
-  // Scan through the entries in the dictionary and determine which satisfy the predicate
-
-  // O(d log d) Sorted
-  // O(d * C) Unsorted
-  for (size_t i = 0; i < nwords; i++) {
-    Slice cur_string = dict_decoder_->string_at_index(i);
-    // Store the codewords that satisfy the predicate to some storage (set, unordered_set, etc.)
-    if (CompareRange(cur_string, lower, upper, ctx->pred().predicate_type() == PredicateType::Equality)) {
-      pred_codewords.insert(i);
-    }
-  }
-  if (pred_codewords.empty()) {
+  PrepareScan(ctx);
+  if (pred_codewords_.empty()) {
     ctx->eval_complete() = true;
     return Status::OK();
   }
@@ -343,7 +325,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   // O(n log d) for ordered set
   // iterate through the data and check which satisfy the predicate
   // regardless of whether it satisfies, put it to the output buffer
-  auto end = pred_codewords.end();
+  auto end = pred_codewords_.end();
   Slice* out = reinterpret_cast<Slice*>(dst->data());
   Arena* out_arena = dst->arena();
   for (size_t i = 0; i < n; i++) {
@@ -355,7 +337,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     out++;
 
     // O(log d)
-    if (pred_codewords.find(codeword) != end) {
+    if (pred_codewords_.find(codeword) != end) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
     }
   }

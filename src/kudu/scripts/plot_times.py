@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 def plot_times():
-  nrows = [1000000]
-  cardinalities = [2, 4, 6, 8, 10, 15, 20, 30, 40, 80, 100, 200, 400, 600, 800, 1000]
+  nrows = [1000, 10000, 100000, 1000000]
+  cardinalities = [2, 4, 6, 8, 10, 15, 20, 40, 80, 100, 200, 400, 600, 800, 1000]
   strlens = [8, 24, 40, 56, 72]
   BASE_DIR = "../../../"
   LOG_DIR_NAME = "build/release/test-logs/"

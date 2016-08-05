@@ -445,7 +445,6 @@ Status CFileSet::Iterator::InitializeSelectionVector(SelectionVector *sel_vec) {
 }
 
 Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
-  // LOG(INFO) << "MaterializeColumn called";
   CHECK_EQ(prepared_count_, dst->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
@@ -455,10 +454,12 @@ Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
 }
 Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
                                                     ColumnEvalContext *ctx) {
-  // LOG(INFO) << "EvalAndMaterializeColumn called from CFileSet::Iterator";
   CHECK_EQ(prepared_count_, ctx->block()->nrows());
   DCHECK_LT(col_idx, col_iters_.size());
 
+  // PrepareColumn calls SeekToOrdinal(&idx) on the correct block and this will call PrepareForNewSeek
+  // PrepareForNewSeek is the function that creates a new BinaryPlainBlock that contains the dictionary for the dict block
+  //
   RETURN_NOT_OK(PrepareColumn(col_idx));
   ColumnIterator* iter = col_iters_[col_idx];
 

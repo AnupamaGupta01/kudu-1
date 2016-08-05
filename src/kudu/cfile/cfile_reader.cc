@@ -714,6 +714,7 @@ Status CFileIterator::PrepareForNewSeek() {
                           "Couldn't read dictionary block");
 
     dict_decoder_.reset(new BinaryPlainBlockDecoder(dict_block_handle_.data()));
+    // TODO: At this point we should be able to parse the rankings, possibly even the predicates
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
   }
 
@@ -1061,7 +1062,6 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
     } else {
       // Fetch as many as we can from the current datablock.
       size_t this_batch = rem;
-      // RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
 
       // Write the block to the remaining_dst, optionally writing to sel
       // If sel gets written to, eval_complete will be set to true

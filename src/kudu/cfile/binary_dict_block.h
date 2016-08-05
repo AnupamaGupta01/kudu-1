@@ -122,6 +122,20 @@ class BinaryDictBlockBuilder : public BlockBuilder {
 
 class CFileIterator;
 
+struct IntHasher
+{
+  uint32_t operator()(const uint32_t& a_ref) {
+    uint32 a = a_ref;
+    a = (a+0x7ed55d16) + (a<<12);
+    a = (a^0xc761c23c) ^ (a>>19);
+    a = (a+0x165667b1) + (a<<5);
+    a = (a+0xd3a2646c) ^ (a<<9);
+    a = (a+0xfd7046c5) + (a<<3);
+    a = (a^0xb55a4f09) ^ (a>>16);
+    return a;
+  }
+};
+
 class BinaryDictBlockDecoder : public BlockDecoder {
  public:
   explicit BinaryDictBlockDecoder(Slice slice, CFileIterator* iter);
@@ -157,16 +171,17 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
  private:
   Status CopyNextDecodeStrings(size_t* n, ColumnDataView* dst);
+  void PrepareScan(ColumnEvalContext *ctx);
   Slice data_;
   bool parsed_;
+  bool prepared_;
 
   // Dictionary block decoder
   BinaryPlainBlockDecoder* dict_decoder_;
   gscoped_ptr<BlockDecoder> data_decoder_;
-<<<<<<< HEAD
-
-=======
->>>>>>> 809d7a59d3d5cc0d21fd9aa70b85d670e3b61cdd
+  std::unordered_set<uint32_t, IntHasher> pred_codewords_;
+  //  std::set<uint32_t> pred_codewords;
+  //  std::vector<uint32_t> pred_codewords;
   DictEncodingMode mode_;
 
   // buffer to hold the codewords, needed by CopyNextDecodeStrings()
