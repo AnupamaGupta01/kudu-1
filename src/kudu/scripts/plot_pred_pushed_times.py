@@ -43,6 +43,6 @@ def main():
       # Plot the given set of times with different colors per cardinality
       ax.plot(cardinalities, times, c=str(strlen/max(strlen_list)))
   plt.show()
-
+    
 if __name__ == "__main__":
   main()
