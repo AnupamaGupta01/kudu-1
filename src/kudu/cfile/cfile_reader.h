@@ -373,10 +373,11 @@ class CFileIterator : public ColumnIterator {
     return io_stats_;
   }
 
-  // It the column is dictionary-coded, returns the decoder
+  // If the column is dictionary-coded, returns the decoder
   // for the cfile's dictionary block. This is called by the
   // StringDictBlockDecoder.
   BinaryPlainBlockDecoder* GetDictDecoder() { return dict_decoder_.get();}
+  void GetDictMetadata(uint32_t& upper_rank, uint32_t& lower_rank, std::vector<uint32_t>& ranked_dict);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CFileIterator);
@@ -438,6 +439,11 @@ class CFileIterator : public ColumnIterator {
   // Fully initialize the underlying cfile reader if needed, and clear any
   // seek-related state.
   Status PrepareForNewSeek();
+
+  // Fully initialize the underlying cfile reader if needed, do any preprocessing for a given block
+  // e.g. get a sorted order for a dictionary block and the rankings for the predicate bounds,
+  //      get the lower and upper bounds of a bitpacked block
+  Status PrepareScan(rowid_t ord_idx, ColumnEvalContext* ctx);
 
   CFileReader* reader_;
 

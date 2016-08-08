@@ -43,7 +43,7 @@ add_library(cfile
   gvint_block.cc
   index_block.cc
   index_btree.cc
-  type_encodings.cc)
+  type_encodings.cc sorted_plain_block.h sorted_plain_block.cc)
 
 target_link_libraries(cfile
   kudu_common

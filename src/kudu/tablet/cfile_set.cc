@@ -402,6 +402,44 @@ Status CFileSet::Iterator::PrepareBatch(size_t *n) {
   return Status::OK();
 }
 
+Status CFileSet::Iterator::PrepareColumn(ColumnEvalContext *ctx) {
+  // TODO: preprocess the blocks for the column specified by the context
+  if (cols_prepared_[ctx->col_idx()]) {
+    // Already prepared in this batch.
+    return Status::OK();
+  }
+
+  ColumnIterator* col_iter = col_iters_[ctx->col_idx()];
+  size_t n = prepared_count_;
+
+  if (!col_iter->seeked() || col_iter->GetCurrentOrdinal() != cur_idx_) {
+    // Either this column has not yet been accessed, or it was accessed
+    // but then skipped in a prior block (e.g because predicates on other
+    // columns completely eliminated the block).
+    //
+    // Either way, we need to seek it to the correct offset.
+    RETURN_NOT_OK(col_iter->PrepareScan(cur_idx_, ctx));
+  }
+
+  Status s = col_iter->PrepareBatch(&n);
+  if (!s.ok()) {
+    LOG(WARNING) << "Unable to prepare column " << ctx->col_idx() << ": " << s.ToString();
+    return s;
+  }
+
+  if (n != prepared_count_) {
+    return Status::Corruption(
+            StringPrintf("Column %zd (%s) didn't yield enough rows at offset %zd: expected "
+                                 "%zd but only got %zd", ctx->col_idx(),
+                         projection_->column(ctx->col_idx()).ToString().c_str(),
+                         cur_idx_, prepared_count_, n));
+  }
+
+  cols_prepared_[ctx->col_idx()] = true;
+
+  return Status::OK();
+
+}
 
 Status CFileSet::Iterator::PrepareColumn(size_t idx) {
   if (cols_prepared_[idx]) {
@@ -452,17 +490,22 @@ Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
   ColumnIterator* iter = col_iters_[col_idx];
   return iter->Scan(dst);
 }
-Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
-                                                    ColumnEvalContext *ctx) {
-  CHECK_EQ(prepared_count_, ctx->block()->nrows());
-  DCHECK_LT(col_idx, col_iters_.size());
 
-  RETURN_NOT_OK(PrepareColumn(col_idx));
-  ColumnIterator* iter = col_iters_[col_idx];
+Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
+  CHECK_EQ(prepared_count_, ctx->block()->nrows());
+  DCHECK_LT(ctx->col_idx(), col_iters_.size());
+
+  RETURN_NOT_OK(PrepareColumn(ctx));
+  ColumnIterator* iter = col_iters_[ctx->col_idx()];
 
   // implemented in cfile_reader.cc
-  return iter->Scan(ctx);
+  // Materialize the data into the column block, updating the selection vector if possible
+  RETURN_NOT_OK(iter->Scan(ctx));
 
+  // If the block does not support evaluation, evaluate cell-by-cell
+  if (!ctx->eval_complete()) {
+    ctx->pred().Evaluate(*ctx->block(), ctx->sel());
+  }
 }
 
 Status CFileSet::Iterator::FinishBatch() {

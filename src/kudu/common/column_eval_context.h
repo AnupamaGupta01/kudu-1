@@ -11,11 +11,13 @@ namespace kudu {
 
 class ColumnEvalContext {
 public:
-  ColumnEvalContext(const ColumnPredicate &pred,
+  ColumnEvalContext(const size_t col_idx,
+                    const ColumnPredicate &pred,
                     ColumnBlock *block,
                     SelectionVector *sel,
                     bool &eval_complete) :
-          pred_(pred), block_(block), sel_(sel), eval_complete_(eval_complete) {};
+          col_idx_(col_idx), pred_(pred), block_(block), sel_(sel), eval_complete_(eval_complete) {};
+  const size_t col_idx() { return col_idx_; }
 
   const ColumnPredicate &pred() { return pred_; }
 
@@ -26,6 +28,8 @@ public:
   bool &eval_complete() { return eval_complete_; }
 
 private:
+  const size_t col_idx_;
+
   // Predicate being evaluated
   const ColumnPredicate &pred_;
 

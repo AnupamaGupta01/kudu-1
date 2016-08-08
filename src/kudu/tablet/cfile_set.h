@@ -146,8 +146,7 @@ class CFileSet::Iterator : public ColumnwiseIterator {
 
   virtual Status MaterializeColumn(size_t col_idx, ColumnBlock *dst) OVERRIDE;
 
-  virtual Status EvalAndMaterializeColumn(size_t col_idx,
-                                          ColumnEvalContext *ctx) OVERRIDE;
+  virtual Status EvalAndMaterializeColumn(ColumnEvalContext *ctx) OVERRIDE;
 
   virtual Status FinishBatch() OVERRIDE;
 
@@ -201,6 +200,7 @@ class CFileSet::Iterator : public ColumnwiseIterator {
 
   // Prepare the given column if not already prepared.
   Status PrepareColumn(size_t col_idx);
+  Status PrepareColumn(ColumnEvalPredicate *ctx);
 
   const std::shared_ptr<CFileSet const> base_data_;
   const Schema* projection_;

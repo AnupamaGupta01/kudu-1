@@ -199,6 +199,8 @@ BinaryDictBlockDecoder::BinaryDictBlockDecoder(Slice slice, CFileIterator* iter)
     : data_(std::move(slice)),
       parsed_(false),
       prepared_(false) {
+  // TODO: _ = iter->GetCfileMetadata
+  iter->GetDictMetadata(upper_rank_, lower_rank_, ranked_dict_);
   dict_decoder_ = iter->GetDictDecoder();
 }
 
@@ -296,6 +298,8 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterDictValue(const void* value_void, bo
   while (left != right) {
     // referring to the middle of the sorted codewords
     uint32_t mid = (left + right) / 2;
+
+    // dict_decoder_->codeword_with_rank()
     uint32_t mid_codeword = word_at_index(mid);
 
     // referring to the string corresponding to the middle
@@ -409,8 +413,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   PrepareScan(ctx);
   // check if should short circuit
 
-  //  size_t nwords = dict_decoder_->Count();
-
   BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
 
   // Copy the words of the data block into a buffer so that we can easily access the UINT32s
@@ -418,9 +420,8 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   codeword_buf_.resize(n*sizeof(uint32_t));
   d_bptr->CopyNextValuesToArray(&n, codeword_buf_.data());
 
-  // O(n log d) for ordered set
-  // iterate through the data and check which satisfy the predicate
-  // regardless of whether it satisfies, put it to the output buffer
+  // Iterate through the data and check which satisfy the predicate
+  // Regardless of whether it satisfies, put it to the output buffer
   Slice* out = reinterpret_cast<Slice*>(dst->data());
   Arena* out_arena = dst->arena();
   for (size_t i = 0; i < n; i++) {
@@ -430,6 +431,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     Slice elem = dict_decoder_->string_at_index(codeword);
     CHECK(out_arena->RelocateSlice(elem, out));
     out++;
+
     if (ctx->pred().predicate_type() == PredicateType::Equality && ranked_dict_[codeword] == lower_rank_) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
     }

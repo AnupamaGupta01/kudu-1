@@ -531,6 +531,11 @@ CFileIterator::CFileIterator(CFileReader* reader,
 CFileIterator::~CFileIterator() {
 }
 
+Status CFileIterator::PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) {
+  //TODO: prepare decoder metadata (e.g. bounds of codeword rankings)
+  RETURN_NOT_OK(SeekToOrdinal(ord_idx));
+}
+
 Status CFileIterator::SeekToOrdinal(rowid_t ord_idx) {
   RETURN_NOT_OK(PrepareForNewSeek());
   if (PREDICT_FALSE(posidx_iter_ == nullptr)) {
@@ -688,6 +693,14 @@ Status CFileIterator::SeekAtOrAfter(const EncodedKey &key,
   return Status::OK();
 }
 
+void CFileIterator::GetDictMetadata(ColumnEvalContext *ctx,
+                                    uint32_t& upper_rank,
+                                    uint32_t& lower_rank,
+                                    std::vector<uint32_t>& ranked_dict) {
+
+}
+
+
 Status CFileIterator::PrepareForNewSeek() {
   // Fully open the CFileReader if it was lazily opened earlier.
   //
@@ -706,6 +719,8 @@ Status CFileIterator::PrepareForNewSeek() {
 
   // Initialize the decoder for the dictionary block
   // in dictionary encoding mode.
+  //
+  // Note: this only happens once per CFileIterator
   if (!dict_decoder_ && reader_->footer().has_dict_block_ptr()) {
     BlockPointer bp(reader_->footer().dict_block_ptr());
 
@@ -715,6 +730,8 @@ Status CFileIterator::PrepareForNewSeek() {
 
     dict_decoder_.reset(new BinaryPlainBlockDecoder(dict_block_handle_.data()));
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
+
+
   }
 
   seeked_ = nullptr;

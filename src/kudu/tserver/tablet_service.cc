@@ -1584,7 +1584,7 @@ Status TabletServiceImpl::HandleContinueScanRequest(const ScanRequestPB* req,
 
     // The call to NextBlock materializes the data into the block and fills out the block's selection vector
     // iter itself has the data required to handle predicates
-    // For DiskRowSets, this is a UnionIterator(MaterializingIterator(DeltaApplier(CFileSetIterator, DeltaIterator))
+    // For DiskRowSets, this is a UnionIterator(MaterializingIterator(DeltaApplier(CFileSetIterator, DeltaIterator)))
     Status s = iter->NextBlock(&block);
     if (PREDICT_FALSE(!s.ok())) {
       LOG(WARNING) << "Copying rows from internal iterator for request " << req->ShortDebugString();
