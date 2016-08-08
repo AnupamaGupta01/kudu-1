@@ -557,7 +557,8 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     bool eval_complete = false;
 
-    ColumnEvalContext *ctx = new ColumnEvalContext(get<1>(col_pred),
+    ColumnEvalContext *ctx = new ColumnEvalContext(get<0>(col_pred),
+                                                   get<1>(col_pred),
                                                    &dst_col,
                                                    dst->selection_vector(),
                                                    eval_complete);
@@ -565,7 +566,7 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     // Call Scan on the iterator such that dst_col gets populated with all the data for the column
     // and selection_vector is filled out appropriately. If this cannot be done by the iterator,
     // eval_complete should be set to false, and Evaluate will be called on the data.
-    RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(get<0>(col_pred), ctx));
+    RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(ctx));
 
     if (!eval_complete) {
       RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));

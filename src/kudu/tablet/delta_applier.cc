@@ -94,11 +94,10 @@ Status DeltaApplier::InitializeSelectionVector(SelectionVector *sel_vec) {
   return delta_iter_->ApplyDeletes(sel_vec);
 }
 
-Status DeltaApplier::EvalAndMaterializeColumn(size_t col_idx,
-                                              ColumnEvalContext *ctx) {
+Status DeltaApplier::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   // LOG(INFO) << "EvalAndMaterializeColumn called from DeltaApplier";
   // eval_complete = false;
-    RETURN_NOT_OK(base_iter_->EvalAndMaterializeColumn(col_idx, ctx));
+    RETURN_NOT_OK(base_iter_->EvalAndMaterializeColumn(ctx));
 //  DCHECK(!first_prepare_) << "PrepareBatch() must be called at least once";
 //  sel->SetAllTrue();
 //  RETURN_NOT_OK(base_iter_->MaterializeColumn(col_idx, dst));
@@ -108,8 +107,6 @@ Status DeltaApplier::EvalAndMaterializeColumn(size_t col_idx,
   return Status::OK();
   // TODO: apply the updates to the column and to the selection vector
 
-  
-  // return MaterializeColumn(col_idx, dst);
 }
 
 Status DeltaApplier::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {

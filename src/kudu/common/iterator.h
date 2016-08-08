@@ -101,8 +101,7 @@ class ColumnwiseIterator : public virtual IteratorBase {
   // Any indirect data (eg strings) are copied into the destination block's
   // arena, if non-null.
   virtual Status MaterializeColumn(size_t col_idx, ColumnBlock *dst) = 0;
-  virtual Status EvalAndMaterializeColumn(size_t col_idx,
-                                          ColumnEvalContext *ctx) = 0;
+  virtual Status EvalAndMaterializeColumn(ColumnEvalContext *ctx) = 0;
 
   // Finish the current batch.
   virtual Status FinishBatch() = 0;

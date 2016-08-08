@@ -214,6 +214,7 @@ class ColumnIterator {
   // then returns a NotFound Status.
   // TODO: do we ever want to be able to seek to the end of the file?
   virtual Status SeekToOrdinal(rowid_t ord_idx) = 0;
+  virtual Status PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) = 0;
 
   // Return true if this reader is currently seeked.
   // If the iterator is not seeked, it is an error to call any functions except
@@ -274,6 +275,7 @@ class DefaultColumnValueIterator : public ColumnIterator {
     : typeinfo_(typeinfo), value_(value), ordinal_(0) {
   }
 
+  Status PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) OVERRIDE;
   Status SeekToOrdinal(rowid_t ord_idx) OVERRIDE;
 
   bool seeked() const OVERRIDE { return true; }
@@ -349,6 +351,7 @@ class CFileIterator : public ColumnIterator {
   // this will always return *n == dst->size(). In other words, this does not
   // ever result in a "short read".
   Status PrepareBatch(size_t *n) OVERRIDE;
+  Status PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) OVERRIDE;
 
   // Copy values into the prepared column block.
   // Any indirected values (eg strings) are copied into the dst block's
@@ -377,6 +380,7 @@ class CFileIterator : public ColumnIterator {
   // for the cfile's dictionary block. This is called by the
   // StringDictBlockDecoder.
   BinaryPlainBlockDecoder* GetDictDecoder() { return dict_decoder_.get();}
+  SelectionVector* GetPredicateSet() { return pred_set_.get();}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CFileIterator);
@@ -448,6 +452,9 @@ class CFileIterator : public ColumnIterator {
   gscoped_ptr<BinaryPlainBlockDecoder> dict_decoder_;
   BlockHandle dict_block_handle_;
 
+  // Set containing the codewords that satisfy the predicate in a dictionary
+  gscoped_ptr<SelectionVector>pred_set_;
+
   // The currently in-use index iterator. This is equal to either
   // posidx_iter_.get(), validx_iter_.get(), or NULL if not seeked.
   IndexTreeIterator *seeked_;
@@ -462,6 +469,10 @@ class CFileIterator : public ColumnIterator {
 
   // True if PrepareBatch() has been called more recently than FinishBatch().
   bool prepared_;
+
+  // Predicate and selection vector associated with the iterator
+  ColumnEvalContext *ctx_;
+
 
   // Whether this iterator will ask the cfile to cache the blocks it requests or not.
   const CFileReader::CacheControl cache_control_;
@@ -478,6 +489,28 @@ class CFileIterator : public ColumnIterator {
 
   // a temporary buffer for encoding
   faststring tmp_buf_;
+
+  // Function to be used in generating dictionary metadata (e.g. predicate set)
+  static bool CompareRange(Slice& str, const void *lower, const void *upper, bool equality) {
+    // will return true only if str is between [lower, upper)
+    if (equality) {
+      // this is an equality predicate
+      return str.compare(*static_cast<const Slice*>(lower)) == 0;
+    }
+    if (!upper) {
+      // this is a lower bound, lower should be greater than str
+      return str.compare(*static_cast<const Slice*>(lower)) >= 0;
+    }
+    else if (!lower) {
+      // this is an upper bound, upper should be less than str
+      return str.compare(*static_cast<const Slice*>(upper)) < 0;
+    }
+    else {
+      // both bounds exist, get stuff between them
+      return str.compare(*static_cast<const Slice*>(lower)) >= 0 &&
+             str.compare(*static_cast<const Slice*>(upper)) < 0;
+    }
+  }
 };
 
 } // namespace cfile

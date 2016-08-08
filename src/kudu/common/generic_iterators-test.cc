@@ -78,10 +78,9 @@ class VectorIterator : public ColumnwiseIterator {
     return Status::OK();
   }
 
-  Status EvalAndMaterializeColumn(size_t col_idx,
-                                  ColumnEvalContext *ctx) OVERRIDE {
+  Status EvalAndMaterializeColumn(ColumnEvalContext *ctx) OVERRIDE {
     ctx->eval_complete() = false;
-    return MaterializeColumn(col_idx, ctx->block());
+    return MaterializeColumn(ctx->col_idx(), ctx->block());
   }
 
   virtual Status FinishBatch() OVERRIDE {

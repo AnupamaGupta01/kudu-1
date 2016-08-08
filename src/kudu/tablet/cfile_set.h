@@ -26,6 +26,7 @@
 #include "kudu/cfile/bloomfile.h"
 #include "kudu/cfile/cfile_reader.h"
 
+#include "kudu/common/column_eval_context.h"
 #include "kudu/common/iterator.h"
 #include "kudu/common/schema.h"
 #include "kudu/gutil/macros.h"
@@ -146,8 +147,7 @@ class CFileSet::Iterator : public ColumnwiseIterator {
 
   virtual Status MaterializeColumn(size_t col_idx, ColumnBlock *dst) OVERRIDE;
 
-  virtual Status EvalAndMaterializeColumn(size_t col_idx,
-                                          ColumnEvalContext *ctx) OVERRIDE;
+  virtual Status EvalAndMaterializeColumn(ColumnEvalContext *ctx) OVERRIDE;
 
   virtual Status FinishBatch() OVERRIDE;
 
@@ -201,6 +201,7 @@ class CFileSet::Iterator : public ColumnwiseIterator {
 
   // Prepare the given column if not already prepared.
   Status PrepareColumn(size_t col_idx);
+  Status PrepareColumn(ColumnEvalContext *ctx);
 
   const std::shared_ptr<CFileSet const> base_data_;
   const Schema* projection_;

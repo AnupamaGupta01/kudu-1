@@ -471,6 +471,10 @@ size_t CFileReader::memory_footprint() const {
 ////////////////////////////////////////////////////////////
 // Default Column Value Iterator
 ////////////////////////////////////////////////////////////
+Status DefaultColumnValueIterator::PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) {
+  return SeekToOrdinal(ord_idx);
+}
+
 Status DefaultColumnValueIterator::SeekToOrdinal(rowid_t ord_idx) {
   ordinal_ = ord_idx;
   return Status::OK();
@@ -523,12 +527,19 @@ CFileIterator::CFileIterator(CFileReader* reader,
   : reader_(reader),
     seeked_(nullptr),
     prepared_(false),
+    ctx_(nullptr),
     cache_control_(cache_control),
     last_prepare_idx_(-1),
     last_prepare_count_(-1) {
 }
 
 CFileIterator::~CFileIterator() {
+}
+
+Status CFileIterator::PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) {
+  ctx_ = ctx;
+  SeekToOrdinal(ord_idx);
+  return Status::OK();
 }
 
 Status CFileIterator::SeekToOrdinal(rowid_t ord_idx) {
@@ -714,8 +725,23 @@ Status CFileIterator::PrepareForNewSeek() {
                           "Couldn't read dictionary block");
 
     dict_decoder_.reset(new BinaryPlainBlockDecoder(dict_block_handle_.data()));
-    // TODO: At this point we should be able to parse the rankings, possibly even the predicates
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
+
+    // Set the predicate-satisfying set
+    if (ctx_) {
+      size_t nwords = dict_decoder_->Count();
+      pred_set_.reset(new SelectionVector(nwords));
+      pred_set_->SetAllFalse();
+      for (size_t i = 0; i < nwords; i++) {
+        Slice cur_string = dict_decoder_->string_at_index(i);
+        // Store the codewords that satisfy the predicate to some storage (set, unordered_set, etc.)
+        if (CompareRange(cur_string, ctx_->pred().raw_lower(), ctx_->pred().raw_upper(),
+                         ctx_->pred().predicate_type() == PredicateType::Equality)) {
+          BitmapSet(pred_set_->mutable_bitmap(), i);
+        }
+      }
+      LOG(INFO) << BitmapToString(pred_set_->bitmap(), pred_set_->nrows());
+    }
   }
 
   seeked_ = nullptr;

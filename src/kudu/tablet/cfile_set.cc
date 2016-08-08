@@ -439,6 +439,43 @@ Status CFileSet::Iterator::PrepareColumn(size_t idx) {
   return Status::OK();
 }
 
+Status CFileSet::Iterator::PrepareColumn(ColumnEvalContext *ctx) {
+  if (cols_prepared_[ctx->col_idx()]) {
+    // Already prepared in this batch.
+    return Status::OK();
+  }
+
+  ColumnIterator* col_iter = col_iters_[ctx->col_idx()];
+  size_t n = prepared_count_;
+
+  if (!col_iter->seeked() || col_iter->GetCurrentOrdinal() != cur_idx_) {
+    // Either this column has not yet been accessed, or it was accessed
+    // but then skipped in a prior block (e.g because predicates on other
+    // columns completely eliminated the block).
+    //
+    // Either way, we need to seek it to the correct offset.
+    RETURN_NOT_OK(col_iter->PrepareScan(cur_idx_, ctx));
+  }
+
+  Status s = col_iter->PrepareBatch(&n);
+  if (!s.ok()) {
+    LOG(WARNING) << "Unable to prepare column " << ctx->col_idx() << ": " << s.ToString();
+    return s;
+  }
+
+  if (n != prepared_count_) {
+    return Status::Corruption(
+            StringPrintf("Column %zd (%s) didn't yield enough rows at offset %zd: expected "
+                                 "%zd but only got %zd", ctx->col_idx(),
+                         projection_->column(ctx->col_idx()).ToString().c_str(),
+                         cur_idx_, prepared_count_, n));
+  }
+
+  cols_prepared_[ctx->col_idx()] = true;
+
+  return Status::OK();
+}
+
 Status CFileSet::Iterator::InitializeSelectionVector(SelectionVector *sel_vec) {
   sel_vec->SetAllTrue();
   return Status::OK();
@@ -452,16 +489,15 @@ Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
   ColumnIterator* iter = col_iters_[col_idx];
   return iter->Scan(dst);
 }
-Status CFileSet::Iterator::EvalAndMaterializeColumn(size_t col_idx,
-                                                    ColumnEvalContext *ctx) {
+Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   CHECK_EQ(prepared_count_, ctx->block()->nrows());
-  DCHECK_LT(col_idx, col_iters_.size());
+  DCHECK_LT(ctx->col_idx(), col_iters_.size());
 
   // PrepareColumn calls SeekToOrdinal(&idx) on the correct block and this will call PrepareForNewSeek
   // PrepareForNewSeek is the function that creates a new BinaryPlainBlock that contains the dictionary for the dict block
   //
-  RETURN_NOT_OK(PrepareColumn(col_idx));
-  ColumnIterator* iter = col_iters_[col_idx];
+  RETURN_NOT_OK(PrepareColumn(ctx));
+  ColumnIterator* iter = col_iters_[ctx->col_idx()];
 
   // implemented in cfile_reader.cc
   // return iter->Scan(dst);
