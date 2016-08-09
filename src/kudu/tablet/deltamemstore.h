@@ -203,7 +203,7 @@ class DMSIterator : public DeltaIterator {
   string ToString() const OVERRIDE;
 
   virtual bool HasNext() OVERRIDE;
-
+  virtual bool HasUpdates() OVERRIDE;
  private:
   DISALLOW_COPY_AND_ASSIGN(DMSIterator);
   FRIEND_TEST(TestDeltaMemStore, TestIteratorDoesUpdates);

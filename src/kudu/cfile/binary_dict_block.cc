@@ -44,7 +44,6 @@ BinaryDictBlockBuilder::BinaryDictBlockBuilder(const WriterOptions* options)
     dict_block_(options_),
     dictionary_strings_arena_(1024, 32*1024*1024),
     mode_(kCodeWordMode) {
-  sort_builder_.reset(new BShufBlockBuilder<UINT32>(options_));
   data_builder_.reset(new BShufBlockBuilder<UINT32>(options_));
   Reset();
 }
@@ -57,12 +56,9 @@ void BinaryDictBlockBuilder::Reset() {
   if (mode_ == kCodeWordMode &&
       dict_block_.IsBlockFull(options_->storage_attributes.cfile_block_size)) {
     mode_ = kPlainBinaryMode;
-//    data_builder_.reset(new BinaryPlainBlockBuilder(options_));
-    data_builder_.reset(new SortedPlainBlockBuilder(options_));
-    sort_builder_.reset();
+    data_builder_.reset(new SortedVocabBlockBuilder(options_));
   } else {
     data_builder_->Reset();
-    sort_builder_->Reset();
   }
   finished_ = false;
 }
@@ -270,9 +266,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     }
     else if (dict_decoder_->RankOfCodeword(codeword) >= lower_rank_ && dict_decoder_->RankOfCodeword(codeword) < upper_rank_) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
-    }
-    else {
-
     }
   }
   offset += n;

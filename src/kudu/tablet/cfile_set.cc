@@ -498,7 +498,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   RETURN_NOT_OK(PrepareColumn(ctx));
   ColumnIterator* iter = col_iters_[ctx->col_idx()];
 
-  // implemented in cfile_reader.cc
+  // implemented in cfile_reader.ccc
   // Materialize the data into the column block, updating the selection vector if possible
   RETURN_NOT_OK(iter->Scan(ctx));
 

@@ -47,8 +47,7 @@ class KuduTabletTest : public KuduTest {
  public:
   explicit KuduTabletTest(const Schema& schema)
     : schema_(schema.CopyWithColumnIds()),
-      client_schema_(schema),
-      n_tablets_(0) {
+      client_schema_(schema) {
     // Keep unit tests fast, but only if no one has set the flag explicitly.
     if (google::GetCommandLineFlagInfoOrDie("enable_data_block_fsync").is_default) {
       FLAGS_enable_data_block_fsync = false;
@@ -63,13 +62,13 @@ class KuduTabletTest : public KuduTest {
 
   // Always create a new TabletHarness with a new fs_root
   void CreateTestTablet(const string& root_dir = "") {
-    string dir = root_dir.empty() ? GetTestPath("fs_root" + std::to_string(n_tablets_)) : root_dir;
+    string dir = root_dir.empty() ? GetTestPath("fs_root") : root_dir;
     TabletHarness::Options opts(dir);
     opts.enable_metrics = true;
+    bool first_time = harness_ == NULL;
 
     harness_.reset(new TabletHarness(schema_, opts));
-    n_tablets_++;
-    CHECK_OK(harness_->Create(true));
+    CHECK_OK(harness_->Create(first_time));
   }
 
   void SetUpTestTablet(const string& root_dir = "") {
@@ -119,7 +118,6 @@ class KuduTabletTest : public KuduTest {
   const Schema schema_;
   const Schema client_schema_;
   gscoped_ptr<TabletHarness> harness_;
-  size_t n_tablets_;
 };
 
 class KuduRowSetTest : public KuduTabletTest {

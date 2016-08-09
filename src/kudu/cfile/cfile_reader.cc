@@ -722,7 +722,7 @@ Status CFileIterator::PrepareForNewSeek() {
     RETURN_NOT_OK_PREPEND(reader_->ReadBlock(bp, CFileReader::CACHE_BLOCK, &dict_block_handle_),
                           "Couldn't read dictionary block");
 
-    dict_decoder_.reset(new SortedPlainBlockDecoder(dict_block_handle_.data()));
+    dict_decoder_.reset(new SortedVocabBlockDecoder(dict_block_handle_.data()));
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
 
     bool upper_exact, lower_exact = false;
@@ -733,6 +733,10 @@ Status CFileIterator::PrepareForNewSeek() {
       dict_decoder_->SeekAtOrAfterWord(ctx_->pred().raw_upper(), &upper_exact, upper_codeword);
       dict_predicate_ = gscoped_ptr<DictPredicate>(new DictPredicate(dict_decoder_->RankOfCodeword(lower_codeword),
                                           dict_decoder_->RankOfCodeword(upper_codeword)));
+    }
+    else {
+      // These are dummy values and shouldn't be used by the dictblocks
+      dict_predicate_ = gscoped_ptr<DictPredicate>(new DictPredicate(0, 0));
     }
   }
 
@@ -968,7 +972,6 @@ Status CFileIterator::Scan(ColumnBlock *dst) {
                                      "NULLNULLNULLNULLNULL");
 #endif
         }
-
         // Set the ColumnBlock bitmap
         remaining_dst.SetNullBits(this_batch, not_null);
 
@@ -1046,6 +1049,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
         size_t this_batch = nblock;
         if (not_null) {
           // TODO: Maybe copy all and shift later?
+          // EvaluatePredicate is a wrapper around CopyNextValues
           RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(ctx, offset, this_batch, &remaining_dst));
           DCHECK_EQ(nblock, this_batch);
           pb->needs_rewind_ = true;

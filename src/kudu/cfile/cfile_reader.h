@@ -387,7 +387,7 @@ class CFileIterator : public ColumnIterator {
   // If the column is dictionary-coded, returns the decoder
   // for the cfile's dictionary block. This is called by the
   // StringDictBlockDecoder.
-  SortedPlainBlockDecoder* GetDictDecoder() { return dict_decoder_.get();}
+  SortedVocabBlockDecoder* GetDictDecoder() { return dict_decoder_.get();}
   DictPredicate* GetDictPredicate() { return dict_predicate_.get();}
 
  private:
@@ -461,7 +461,7 @@ class CFileIterator : public ColumnIterator {
   gscoped_ptr<IndexTreeIterator> validx_iter_;
 
   // Decoder for the dictionary block
-  gscoped_ptr<SortedPlainBlockDecoder> dict_decoder_;
+  gscoped_ptr<SortedVocabBlockDecoder> dict_decoder_;
   BlockHandle dict_block_handle_;
 
   // The currently in-use index iterator. This is equal to either

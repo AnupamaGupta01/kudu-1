@@ -14,9 +14,9 @@ namespace cfile {
 
 struct WriterOptions;
 
-class SortedPlainBlockBuilder : public BlockBuilder {
+class SortedVocabBlockBuilder : public BlockBuilder {
 public:
-  explicit SortedPlainBlockBuilder(const WriterOptions *options);
+  explicit SortedVocabBlockBuilder(const WriterOptions *options);
 
   bool IsBlockFull(size_t limit) const OVERRIDE;
   int Add(const uint8_t *vals, size_t count) OVERRIDE;
@@ -45,13 +45,11 @@ private:
   gscoped_ptr<BinaryPlainBlockBuilder> vocab_builder_;
   gscoped_ptr<BShufBlockBuilder<UINT32>> sort_builder_;
   Arena dictionary_strings_arena_;
-
-  bool finished_;
 };
 
-class SortedPlainBlockDecoder : public BlockDecoder {
+class SortedVocabBlockDecoder : public BlockDecoder {
 public:
-  explicit SortedPlainBlockDecoder(Slice slice);
+  explicit SortedVocabBlockDecoder(Slice slice);
 
   virtual Status ParseHeader() OVERRIDE;
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
@@ -110,9 +108,11 @@ private:
   gscoped_ptr<BShufBlockDecoder<UINT32>> sort_decoder_;
 
   // Sorted ranking of codeword.
-  // dict block {"B", "A", "C"} with codewords {0, 1, 2} represented as:
-  // rank_of_codeword_: {1, 0, 2}
+  // dict block {"B", "A", "C", "\0"} with codewords {0, 1, 2, 3} represented as:
+  // rank_of_codeword_: {2, 1, 3, 0} ("B": rank 2, "A": rank 1, "C": rank 3, "\0": rank 0)
+  // sorted codewords_: {3, 1, 0, 2} ("\0": c0, "A": c1, "B": c0, "C": c2)
   std::vector<uint32_t> rank_of_codeword_;
+  std::vector<uint32_t> sorted_codewords_;
 
   // Index of the currently seeked element in the block.
   uint32_t cur_idx_;

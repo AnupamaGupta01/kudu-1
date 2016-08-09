@@ -23,10 +23,11 @@ enum Setup {
 };
 
 // These are the default values
-DEFINE_int32(nrows, 1000000, " ");
-DEFINE_int32(cardinality, 1000, " ");
-DEFINE_int32(strlen, 64, " ");
-DEFINE_int32(pred_upper, 21, " ");
+DEFINE_int32(nrows, 10000, "Number of rows generated per tablet");
+DEFINE_int32(cardinality, 1000, "Cardinality of the string column");
+DEFINE_int32(strlen, 64, "Length of each word in the string column");
+DEFINE_int32(pred_upper, 21, "Upper bound on the predicate [0, p)");
+DEFINE_int32(nrepeats, 1, "Number of times to repeat per tablet");
 
 
 class TabletDecoderEvalTest : public KuduTabletTest,
@@ -54,7 +55,8 @@ public:
     for (int64_t i = 0; i < FLAGS_nrows; i++) {
       CHECK_OK(row.SetInt32(0, i));
       CHECK_OK(row.SetInt32(1, i * 10));
-      CHECK_OK(row.SetStringCopy(2, StringPrintf(("%0"+std::to_string(FLAGS_strlen) + PRId64).c_str(), i % FLAGS_cardinality)));
+      CHECK_OK(row.SetStringCopy(2, StringPrintf(("%0"+std::to_string(FLAGS_strlen) + PRId64).c_str(),
+                                                 i%FLAGS_cardinality)));
       ASSERT_OK_FAST(writer.Insert(row));
 
       if (i == 205 && GetParam() == SPLIT_MEMORY_DISK) {
@@ -66,12 +68,17 @@ public:
     }
 
   }
+  void SetupTablet() {
+  }
   void TestTimedScanAndFilter() {
+
     Arena arena(128, 1028);
     AutoReleasePool pool;
     ScanSpec spec;
-    const std::string lower_string = StringPrintf(("%0"+std::to_string(FLAGS_strlen) + PRId64).c_str(), static_cast<int64_t>(0));
-    const std::string upper_string = StringPrintf(("%0"+std::to_string(FLAGS_strlen) + PRId64).c_str(), static_cast<int64_t>(FLAGS_pred_upper));
+    const std::string lower_string = StringPrintf(("%0"+std::to_string(FLAGS_strlen) + PRId64).c_str(),
+                                                  static_cast<int64_t>(0));
+    const std::string upper_string = StringPrintf(("%0"+std::to_string(FLAGS_strlen) + PRId64).c_str(),
+                                                  static_cast<int64_t>(FLAGS_pred_upper));
     Slice lower(lower_string);
     Slice upper(upper_string);
 
@@ -79,10 +86,10 @@ public:
     spec.AddPredicate(string_pred);
     spec.OptimizeScan(schema_, &arena, &pool, true);
     ScanSpec orig_spec = spec;
-    FillTestTablet();
     size_t expected_sel_count = FLAGS_pred_upper > FLAGS_cardinality ?
                                 FLAGS_nrows :
-                                (FLAGS_nrows / FLAGS_cardinality) * FLAGS_pred_upper + std::min(FLAGS_nrows % FLAGS_cardinality, FLAGS_pred_upper);
+                                (FLAGS_nrows / FLAGS_cardinality) * FLAGS_pred_upper +
+                                        std::min(FLAGS_nrows % FLAGS_cardinality, FLAGS_pred_upper);
     gscoped_ptr<RowwiseIterator> iter;
     ASSERT_OK(tablet()->NewRowIterator(client_schema_, &iter));
     spec = orig_spec;
@@ -91,11 +98,13 @@ public:
 
     int fetched = 0;
     LOG_TIMING(INFO, "Filtering by string value") {
-      ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
+       //      ASSERT_OK(SilentIterateToStringList(iter.get(), fetched));
+       ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
     }
-    LOG(INFO) << "Nrows: " << FLAGS_nrows <<  ", Cardinality: " << FLAGS_cardinality << ", strlen: " << FLAGS_strlen << ", Expected: " << \
-      expected_sel_count << ", Actual: " << fetched;
+
     ASSERT_EQ(expected_sel_count, fetched);
+    LOG(INFO) << "Nrows: " << FLAGS_nrows <<  ", Cardinality: " << FLAGS_cardinality << ", strlen: "
+              << FLAGS_strlen << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
 
     int expected_blocks_from_disk;
     int expected_rows_from_disk;
@@ -128,13 +137,13 @@ public:
         break;
     }
   }
-
-private:
 };
 
 TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
-  TestTimedScanAndFilter();
-
+  FillTestTablet();
+  for (int i = 0; i < FLAGS_nrepeats; i++) {
+    TestTimedScanAndFilter();
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -142,6 +151,7 @@ int main(int argc, char *argv[]) {
   FLAGS_cardinality = 100;
   FLAGS_strlen = 64;
   FLAGS_pred_upper = 20;
+  FLAGS_nrepeats = 1;
   kudu::ParseCommandLineFlags(&argc, &argv, true);
 
   google::InstallFailureSignalHandler();

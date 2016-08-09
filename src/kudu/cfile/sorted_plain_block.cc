@@ -17,24 +17,23 @@
 namespace kudu {
 namespace cfile {
 
-SortedPlainBlockBuilder::SortedPlainBlockBuilder(const WriterOptions *options)
+SortedVocabBlockBuilder::SortedVocabBlockBuilder(const WriterOptions *options)
   : vocab_builder_(new BinaryPlainBlockBuilder(options)),
     sort_builder_(new BShufBlockBuilder<UINT32>(options)),
     dictionary_strings_arena_(1024, 32*1024*1024) {
   Reset();
 }
 
-void SortedPlainBlockBuilder::Reset() {
+void SortedVocabBlockBuilder::Reset() {
   vocab_builder_->Reset();
   sort_builder_->Reset();
 }
 
-bool SortedPlainBlockBuilder::IsBlockFull(size_t limit) const {
+bool SortedVocabBlockBuilder::IsBlockFull(size_t limit) const {
   return vocab_builder_->IsBlockFull(limit);
 }
 
-Slice SortedPlainBlockBuilder::Finish(rowid_t ordinal_pos) {
-  finished_ = true;
+Slice SortedVocabBlockBuilder::Finish(rowid_t ordinal_pos) {
 
   // vocab builder has its own memory location with its own buffer
   Slice vocab_slice = vocab_builder_->Finish(dictionary_.size());
@@ -66,11 +65,11 @@ Slice SortedPlainBlockBuilder::Finish(rowid_t ordinal_pos) {
   return Slice(buffer_);
 }
 
-uint32_t SortedPlainBlockBuilder::CodewordOf(StringPiece word) const {
+uint32_t SortedVocabBlockBuilder::CodewordOf(StringPiece word) const {
   return dictionary_.at(word);
 }
 
-int SortedPlainBlockBuilder::Add(const uint8_t *vals, size_t count) {
+int SortedVocabBlockBuilder::Add(const uint8_t *vals, size_t count) {
   // Return 0 if the codeword cannot be added to the dictionary
   // Adds the value to the dictionary, does nothing if already in the dict
   // For now, ignore count and only add 1
@@ -98,11 +97,11 @@ int SortedPlainBlockBuilder::Add(const uint8_t *vals, size_t count) {
   return 1;
 }
 
-size_t SortedPlainBlockBuilder::Count() const {
+size_t SortedVocabBlockBuilder::Count() const {
   return vocab_builder_->Count();
 }
 
-Status SortedPlainBlockBuilder::GetFirstKey(void *key_void) const {
+Status SortedVocabBlockBuilder::GetFirstKey(void *key_void) const {
   RETURN_NOT_OK(vocab_builder_->GetFirstKey(key_void));
   return Status::OK();
 }
@@ -111,12 +110,12 @@ Status SortedPlainBlockBuilder::GetFirstKey(void *key_void) const {
 // Decoding
 ////////////////////////////////////////////////////////////
 
-SortedPlainBlockDecoder::SortedPlainBlockDecoder(Slice slice)
+SortedVocabBlockDecoder::SortedVocabBlockDecoder(Slice slice)
         : data_(std::move(slice)),
           parsed_(false) {
 }
 
-Status SortedPlainBlockDecoder::ParseHeader() {
+Status SortedVocabBlockDecoder::ParseHeader() {
   CHECK(!parsed_);
   if (data_.size() < kMinHeaderSize) {
     return Status::Corruption(
@@ -133,21 +132,25 @@ Status SortedPlainBlockDecoder::ParseHeader() {
   sort_decoder_.reset(new BShufBlockDecoder<UINT32>(sort_content));
   RETURN_NOT_OK(sort_decoder_->ParseHeader());
 
-  // TODO: Move this into another tacked-on block to the SortedPlainBlock
-  // Note that every BShufBlock is not O(1) access
+  // TODO: Move this into another tacked-on block to the SortedVocabBlock
 
-  rank_of_codeword_.resize(sort_decoder_->Count());
-  size_t one = 1;
+  uint32_t c_i;
+  size_t vocab_size = sort_decoder_->Count();
+  rank_of_codeword_.resize(vocab_size);
+  sorted_codewords_.resize(vocab_size);
+  RETURN_NOT_OK(sort_decoder_->CopyNextValuesToArray(&vocab_size, reinterpret_cast<uint8_t*>(&sorted_codewords_[0])));
+  // To determine the rank of a codeword, iterate through each element in the sort_decoder_
+  // The ith element in the sort_decoder_, codeword c_i, is, by definition, rank i
+  // Thus, rank_of_codeword[c_i] = i
   for (int i = 0; i < sort_decoder_->Count(); i++) {
-    uint32_t ith;
-    RETURN_NOT_OK(sort_decoder_->CopyNextValuesToArray(&one, reinterpret_cast<uint8_t*>(&ith)));
-    rank_of_codeword_[ith] = i;
+    c_i = sorted_codewords_[i];
+    rank_of_codeword_[c_i] = i;
   }
   parsed_ = true;
   return Status::OK();
 }
 
-void SortedPlainBlockDecoder::SeekToPositionInBlock(uint pos) {
+void SortedVocabBlockDecoder::SeekToPositionInBlock(uint pos) {
   if (PREDICT_FALSE(num_elems_ == 0)) {
     DCHECK_EQ(0, pos);
     return;
@@ -159,29 +162,25 @@ void SortedPlainBlockDecoder::SeekToPositionInBlock(uint pos) {
 
 // Return the rank of a codeword
 // Used to determine whether a codeword is within the bounds of the codeword ranges
-uint32_t SortedPlainBlockDecoder::RankOfCodeword(uint32_t codeword) const {
-  if (codeword == rank_of_codeword_.size()) {
+uint32_t SortedVocabBlockDecoder::RankOfCodeword(uint32_t codeword) const {
+  // If the codeword is out of bounds, consider it to be a high value
+  if (codeword >= rank_of_codeword_.size()) {
     return codeword;
   }
   return rank_of_codeword_[codeword];
 }
 
-// Return the <rank>th codeword of in the dictionary
+// Return the <rank>th highest codeword of in the sorted dictionary
 // Used to search for the codewords corresponding to the predicate bounds
-uint32_t SortedPlainBlockDecoder::CodewordAtRank(uint32_t rank) {
-  // TODO: there must be a cleaner way to do this. Perhaps add a pointer interface into bshuf_block
-  sort_decoder_->SeekToPositionInBlock(rank);
-  uint32_t ret;
-  size_t one = 1;
-  sort_decoder_->CopyNextValuesToArray(&one, reinterpret_cast<uint8_t *>(&ret));
-  return ret;
+uint32_t SortedVocabBlockDecoder::CodewordAtRank(uint32_t rank) {
+  return sorted_codewords_[rank];
 }
 
-Status SortedPlainBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* exact) {
+Status SortedVocabBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* exact) {
   return vocab_decoder_->SeekAtOrAfterValue(value_void, exact);
 }
 
-Status SortedPlainBlockDecoder::SeekAtOrAfterWord(const void *value_void, bool *exact, uint32_t& codeword) {
+Status SortedVocabBlockDecoder::SeekAtOrAfterWord(const void *value_void, bool *exact, uint32_t& codeword) {
   DCHECK(value_void != nullptr);
 
   const Slice &target = *reinterpret_cast<const Slice *>(value_void);
@@ -190,7 +189,7 @@ Status SortedPlainBlockDecoder::SeekAtOrAfterWord(const void *value_void, bool *
   // with a key >= target
   codeword = 0;
   int32_t left = 0;
-  int32_t right = sort_decoder_->Count();
+  int32_t right = sorted_codewords_.size();
   while (left != right) {
     // referring to the middle of the sorted codewords
     uint32_t mid = (left + right) / 2;
@@ -199,7 +198,6 @@ Status SortedPlainBlockDecoder::SeekAtOrAfterWord(const void *value_void, bool *
     uint32_t mid_codeword = CodewordAtRank(mid);
 
     // referring to the string corresponding to the middle
-
     Slice mid_key(vocab_decoder_->string_at_index(mid_codeword));
     int c = mid_key.compare(target);
     if (c < 0) {
@@ -213,15 +211,15 @@ Status SortedPlainBlockDecoder::SeekAtOrAfterWord(const void *value_void, bool *
     }
   }
   *exact = false;
-  if (left == sort_decoder_->Count()) {
-    codeword = sort_decoder_->Count();
+  if (left == sorted_codewords_.size()) {
+    codeword = sorted_codewords_.size();
     return Status::OK();
   }
   codeword = CodewordAtRank(left);
   return Status::OK();
 }
 
-Status SortedPlainBlockDecoder::CopyNextValues(size_t *n, ColumnDataView *dst) {
+Status SortedVocabBlockDecoder::CopyNextValues(size_t *n, ColumnDataView *dst) {
   return vocab_decoder_->CopyNextValues(n, dst);
 }
 

@@ -98,12 +98,11 @@ class BinaryDictBlockBuilder : public BlockBuilder {
   const WriterOptions* options_;
 
   gscoped_ptr<BlockBuilder> data_builder_;
-  gscoped_ptr<BlockBuilder> sort_builder_;
 
   // dict_block_, dictionary_, dictionary_strings_arena_
   // is related to the dictionary block (one per cfile).
   // They should NOT be clear in the Reset() method.
-  SortedPlainBlockBuilder dict_block_;
+  SortedVocabBlockBuilder dict_block_;
 
   // Use a sorted_map to avoid having to double-store StringPieces
   //  std::map<StringPiece, uint32_t> dictionary_;
@@ -166,9 +165,8 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   uint32_t upper_rank_;
 
   // Dictionary block decoder
-  SortedPlainBlockDecoder *dict_decoder_;
+  SortedVocabBlockDecoder *dict_decoder_;
   gscoped_ptr<BlockDecoder> data_decoder_;
-  gscoped_ptr<BShufBlockDecoder<UINT32>> sort_decoder_;
   DictEncodingMode mode_;
 
   // buffer to hold the codewords, needed by CopyNextDecodeStrings()

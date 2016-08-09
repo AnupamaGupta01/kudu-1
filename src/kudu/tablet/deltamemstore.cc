@@ -304,6 +304,7 @@ Status DMSIterator::PrepareBatch(size_t nrows, PrepareFlag flag) {
   return Status::OK();
 }
 
+
 Status DMSIterator::ApplyUpdates(size_t col_to_apply, ColumnBlock *dst) {
   DCHECK_EQ(prepared_for_, PREPARED_FOR_APPLY);
   DCHECK_EQ(prepared_count_, dst->nrows());
@@ -319,7 +320,6 @@ Status DMSIterator::ApplyUpdates(size_t col_to_apply, ColumnBlock *dst) {
 
   return Status::OK();
 }
-
 
 Status DMSIterator::ApplyDeletes(SelectionVector *sel_vec) {
   DCHECK_EQ(prepared_for_, PREPARED_FOR_APPLY);
@@ -361,6 +361,15 @@ bool DMSIterator::HasNext() {
   // delta compaction.
   LOG(FATAL) << "Unimplemented";
   return false;
+}
+
+bool DMSIterator::HasUpdates() {
+  for (auto& col : updates_by_col_) {
+    if (col.size() > 0) {
+      return true;
+    }
+  }
+  return deletes_and_reinserts_.size() > 0;
 }
 
 string DMSIterator::ToString() const {

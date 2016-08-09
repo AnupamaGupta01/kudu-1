@@ -742,7 +742,6 @@ inline Status DeletingVisitor<UNDO>::Visit(const DeltaKey& key,
   return Status::OK();
 }
 
-
 Status DeltaFileIterator::ApplyDeletes(SelectionVector *sel_vec) {
   DCHECK_LE(prepared_count_, sel_vec->nrows());
   if (delta_type_ == REDO) {
@@ -812,6 +811,10 @@ Status DeltaFileIterator::CollectMutations(vector<Mutation *> *dst, Arena *dst_a
 
 bool DeltaFileIterator::HasNext() {
   return !exhausted_ || !delta_blocks_.empty();
+}
+
+bool DeltaFileIterator::HasUpdates() {
+  return HasNext();
 }
 
 string DeltaFileIterator::ToString() const {
