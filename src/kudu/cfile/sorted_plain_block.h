@@ -19,7 +19,6 @@ public:
   explicit SortedPlainBlockBuilder(const WriterOptions *options);
 
   bool IsBlockFull(size_t limit) const OVERRIDE;
-
   int Add(const uint8_t *vals, size_t count) OVERRIDE;
 
   // Return a Slice which represents the encoded data.
@@ -36,24 +35,18 @@ public:
   // Return the first added key.
   // key should be a Slice *
   Status GetFirstKey(void *key) const OVERRIDE;
-
-  // Length of a header.
-  static const size_t kMaxHeaderSize = sizeof(uint32_t) * 3;
+  uint32_t CodewordOf(StringPiece word) const;
 
 private:
   faststring buffer_;
 
-  size_t end_of_data_offset_;
-  size_t size_estimate_;
 
-  std::map<StringPiece, uint32_t> dictionary_;
-  gscoped_ptr<BinaryPlainBlockBuilder> dict_builder_;
-  gscoped_ptr<BShufBlockBuilder> sort_builder_;
+  std::unordered_map<StringPiece, uint32_t, GoodFastHash<StringPiece> > dictionary_;
+  gscoped_ptr<BinaryPlainBlockBuilder> vocab_builder_;
+  gscoped_ptr<BShufBlockBuilder<UINT32>> sort_builder_;
+  Arena dictionary_strings_arena_;
 
   bool finished_;
-
-  const WriterOptions *options_;
-
 };
 
 class SortedPlainBlockDecoder : public BlockDecoder {
@@ -64,6 +57,10 @@ public:
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
   virtual Status SeekAtOrAfterValue(const void *value,
                                     bool *exact_match) OVERRIDE;
+  Status SeekAtOrAfterWord(const void *value,
+                           bool *exact_match,
+                           uint32_t& codeword);
+
   Status CopyNextValues(size_t *n, ColumnDataView *dst) OVERRIDE;
 
   virtual bool HasNext() const OVERRIDE {
@@ -85,18 +82,18 @@ public:
     return ordinal_pos_base_;
   }
 
-  uint32_t codeword_at_rank(size_t idx) const;
+  uint32_t RankOfCodeword(uint32_t codeword) const;
 
   Slice string_at_index(size_t idx) const {
-    const uint32_t offset = offsets_[idx];
-    uint32_t len = offsets_[idx + 1] - offset;
-    return Slice(&data_[offset], len);
+    return vocab_decoder_->string_at_index(idx);
   }
 
   // Minimum length of a header.
   static const size_t kMinHeaderSize = sizeof(uint32_t) * 3;
 
 private:
+  uint32_t CodewordAtRank(uint32_t rank);
+
   Slice data_;
   bool parsed_;
 
@@ -109,8 +106,13 @@ private:
   rowid_t ordinal_pos_base_;
 
 
-  gscoped_ptr<BinaryPlainBlockBuilder> dict_decoder_;
-  gscoped_ptr<BShufBlockDecoder> sort_decoder_;
+  gscoped_ptr<BinaryPlainBlockDecoder> vocab_decoder_;
+  gscoped_ptr<BShufBlockDecoder<UINT32>> sort_decoder_;
+
+  // Sorted ranking of codeword.
+  // dict block {"B", "A", "C"} with codewords {0, 1, 2} represented as:
+  // rank_of_codeword_: {1, 0, 2}
+  std::vector<uint32_t> rank_of_codeword_;
 
   // Index of the currently seeked element in the block.
   uint32_t cur_idx_;
@@ -119,4 +121,4 @@ private:
 } // namespace cfile
 } // namespace kudu
 
-#endif // KUDU_CFILE_SORTED_PREFIX_BLOCK_H
+#endif // KUDU_CFILE_SORTED_PLAIN_BLOCK_H

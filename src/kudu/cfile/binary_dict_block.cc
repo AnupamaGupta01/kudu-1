@@ -22,6 +22,7 @@
 #include <unordered_set>
 #include <set>
 
+#include "kudu/cfile/sorted_plain_block.h"
 #include "kudu/cfile/cfile_reader.h"
 #include "kudu/cfile/cfile_util.h"
 #include "kudu/cfile/cfile_writer.h"
@@ -56,7 +57,8 @@ void BinaryDictBlockBuilder::Reset() {
   if (mode_ == kCodeWordMode &&
       dict_block_.IsBlockFull(options_->storage_attributes.cfile_block_size)) {
     mode_ = kPlainBinaryMode;
-    data_builder_.reset(new BinaryPlainBlockBuilder(options_));
+//    data_builder_.reset(new BinaryPlainBlockBuilder(options_));
+    data_builder_.reset(new SortedPlainBlockBuilder(options_));
     sort_builder_.reset();
   } else {
     data_builder_->Reset();
@@ -69,28 +71,10 @@ Slice BinaryDictBlockBuilder::Finish(rowid_t ordinal_pos) {
   finished_ = true;
 
   InlineEncodeFixed32(&buffer_[0], mode_);
-  //  buffer_.append(static_cast<void *>(&mode_), 4);
   // TODO: if we could modify the the Finish() API a little bit, we can
   // avoid an extra memory copy (buffer_.append(..))
   Slice data_slice = data_builder_->Finish(ordinal_pos);
-
-  // Add the size of the data_slice to the buffer
-  // This will provide a way to determine the location of the sorted values as well
-  uint32_t data_slice_size = data_slice.size();
-  buffer_.append(static_cast<void *>(&data_slice_size), 4);
-  //  InlineEncodeFixed32(&buffer_[4], data_slice.size());
   buffer_.append(data_slice.data(), data_slice.size());
-
-  // Iterate through the sorted codewords and Add each of them to the sort_builder
-  uint32_t i = 0;
-  for (auto iter =  dictionary_.begin(); iter != dictionary_.end(); iter++) {
-    if (sort_builder_->Add(reinterpret_cast<const uint8_t*>(&(iter->second)), 1) == 0) {
-      break;
-    }
-    i++;
-  }
-  Slice sort_slice = sort_builder_->Finish(i);
-  buffer_.append(sort_slice.data(), sort_slice.size());
 
   return Slice(buffer_);
 }
@@ -112,34 +96,19 @@ int BinaryDictBlockBuilder::AddCodeWords(const uint8_t* vals, size_t count) {
   DCHECK(!finished_);
   DCHECK_GT(count, 0);
   size_t i;
-
   if (data_builder_->Count() == 0) {
     const Slice* first = reinterpret_cast<const Slice*>(vals);
     first_key_.assign_copy(first->data(), first->size());
   }
-
   for (i = 0; i < count; i++) {
+    uint32_t codeword = 0;
+    if (dict_block_.Add(vals, 1) == 0) {
+      break;
+    }
     const Slice* src = reinterpret_cast<const Slice*>(vals);
     const char* c_str = reinterpret_cast<const char*>(src->data());
     StringPiece current_item(c_str, src->size());
-    uint32_t codeword;
-
-    if (!FindCopy(dictionary_, current_item, &codeword)) {
-      // The dictionary block is full
-      if (dict_block_.Add(vals, 1) == 0) {
-        break;
-      }
-      const uint8_t* s_ptr = dictionary_strings_arena_.AddSlice(*src);
-      if (s_ptr == nullptr) {
-        // Arena does not have enough space for string content
-        // Ideally, it should not happen.
-        LOG(ERROR) << "Arena of Dictionary Encoder does not have enough memory for strings";
-        break;
-      }
-      const char* s_content = reinterpret_cast<const char*>(s_ptr);
-      codeword = dict_block_.Count() - 1;
-      InsertOrDie(&dictionary_, StringPiece(s_content, src->size()), codeword);
-    }
+    codeword = dict_block_.CodewordOf(current_item);
     // The data block is full
     if (data_builder_->Add(reinterpret_cast<const uint8_t*>(&codeword), 1) == 0) {
       break;
@@ -197,11 +166,10 @@ Status BinaryDictBlockBuilder::GetFirstKey(void* key_void) const {
 
 BinaryDictBlockDecoder::BinaryDictBlockDecoder(Slice slice, CFileIterator* iter)
     : data_(std::move(slice)),
-      parsed_(false),
-      prepared_(false) {
-  // TODO: _ = iter->GetCfileMetadata
-  iter->GetDictMetadata(upper_rank_, lower_rank_, ranked_dict_);
+      parsed_(false) {
   dict_decoder_ = iter->GetDictDecoder();
+  upper_rank_ = iter->GetDictPredicate()->upper_rank;
+  lower_rank_ = iter->GetDictPredicate()->lower_rank;
 }
 
 Status BinaryDictBlockDecoder::ParseHeader() {
@@ -219,11 +187,7 @@ Status BinaryDictBlockDecoder::ParseHeader() {
     return Status::Corruption("header Mode information corrupted");
   }
 
-  uint32_t data_slice_size = DecodeFixed32(&data_[4]);
-
-
-  Slice content(data_.data() + 8, data_slice_size);
-//  Slice content(data_.data() + 4, data_.size() - 4);
+  Slice content(data_.data() + 4, data_.size() - 4);
   if (mode_ == kCodeWordMode) {
     data_decoder_.reset(new BShufBlockDecoder<UINT32>(content));
   } else {
@@ -232,19 +196,7 @@ Status BinaryDictBlockDecoder::ParseHeader() {
     }
     data_decoder_.reset(new BinaryPlainBlockDecoder(content));
   }
-
-  Slice sort_content(data_.data() + 8 + data_slice_size, data_.size() - 8 - data_slice_size);
-  if (mode_ == kCodeWordMode) {
-    sort_decoder_.reset(new BShufBlockDecoder<UINT32>(sort_content));
-  } else {
-    if (mode_ != kPlainBinaryMode) {
-      return Status::Corruption("Unrecognized Dictionary encoded sort block header");
-    }
-    sort_decoder_.reset();
-  }
-
   RETURN_NOT_OK(data_decoder_->ParseHeader());
-  RETURN_NOT_OK(sort_decoder_->ParseHeader());
   parsed_ = true;
   return Status::OK();
 }
@@ -276,122 +228,6 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
   }
 }
 
-uint32_t BinaryDictBlockDecoder::word_at_index(uint32_t index) {
-  // TODO: there must be a cleaner way to do this. Perhaps add a pointer into bshuf_block
-  sort_decoder_->SeekToPositionInBlock(index);
-  uint32_t ret;
-  size_t one = 1;
-  sort_decoder_->CopyNextValuesToArray(&one, reinterpret_cast<uint8_t *>(&ret));
-  return ret;
-}
-
-Status BinaryDictBlockDecoder::SeekAtOrAfterDictValue(const void* value_void, bool* exact, uint32_t& codeword) {
-  DCHECK(value_void != nullptr);
-
-  const Slice &target = *reinterpret_cast<const Slice *>(value_void);
-
-  // Binary search in restart array to find the first restart point
-  // with a key >= target
-  codeword = 0;
-  int32_t left = 0;
-  int32_t right = sort_decoder_->Count();
-  while (left != right) {
-    // referring to the middle of the sorted codewords
-    uint32_t mid = (left + right) / 2;
-
-    // dict_decoder_->codeword_with_rank()
-    uint32_t mid_codeword = word_at_index(mid);
-
-    // referring to the string corresponding to the middle
-    Slice mid_key(dict_decoder_->string_at_index(mid_codeword));
-    int c = mid_key.compare(target);
-    if (c < 0) {
-      left = mid + 1;
-    } else if (c > 0) {
-      right = mid;
-    } else {
-      codeword = mid_codeword;
-      *exact = true;
-      return Status::OK();
-    }
-  }
-  *exact = false;
-  if (left == sort_decoder_->Count()) {
-    codeword = sort_decoder_->Count();
-    return Status::OK();
-  }
-  codeword = word_at_index(left);
-  return Status::OK();
-}
-void BinaryDictBlockDecoder::PrepareScan(ColumnEvalContext *ctx) {
-  // Set eval_complete depending on the predicate type
-  if (prepared_) {
-    return;
-  }
-
-  // TODO: determine a heuristic for when to short-circuit
-  // f(nwords, nrows, avg_strlen)
-  // - avg_strlen can be substituted with size_estimate, since avg_strlen ~ size_estimate/nwords
-  // TODO: kPlainBinaryMode should call data_decoder->CopyNextValues(dst)
-
-  // Get the codewords for upper and lower (if they exist, else get nearest after)
-  // O(log d)
-  // This will give a bound on the rankings
-  // Given a codeword, check its ranking and see if it is within bound
-  bool upper_exact, lower_exact = false;
-  uint32_t lower_codeword, upper_codeword = 0;
-  ranked_dict_.resize(sort_decoder_->Count());
-
-
-  // Rank the codewords:
-  //    ranked_dict[0] = 5 means that codeword 0 is 5th lowest (6th, base 0)
-  for (uint32_t i = 0; i < ranked_dict_.size(); i++) {
-    // word_at_index returns the ith highest codeword (by string), word_at_index(0) has the lowest string
-    uint32_t ith = word_at_index(i);
-    ranked_dict_[ith] = i;
-  }
-  // CASES:
-  //  both found
-  //  lower found, upper not exact
-  //    lowerrank: lower, upperrank: upper
-  //  lower found, upper not found
-  //  lower found, upper null
-  //    lowerrank: lower, upperrank: max
-  //  upper found, lower not exact
-  //    upperrank: upper, lowerrank: lower
-  //  upper found, lower not found
-  //  upper found, lower null
-  //    upperrank: upper, lowerrank: 0
-
-  // if equality, only check the raw_lower, or set upper_rank_(lower_rank_+1)
-  if (ctx->pred().raw_lower() != nullptr) {
-    SeekAtOrAfterDictValue(ctx->pred().raw_lower(), &lower_exact, lower_codeword);
-    lower_rank_ = ranked_dict_[lower_codeword];
-    if (lower_codeword == ranked_dict_.size()) {
-      // lower bound was too great
-      lower_rank_ = lower_codeword;
-    }
-  }
-  else {
-    lower_rank_ = 0;
-  }
-  LOG(INFO) << ranked_dict_.size();
-  if (ctx->pred().raw_upper() != nullptr) {
-    SeekAtOrAfterDictValue(ctx->pred().raw_upper(), &upper_exact, upper_codeword);
-    upper_rank_ = ranked_dict_[upper_codeword];
-    if (upper_codeword == ranked_dict_.size()) {
-      // upper bound larger than the largest element
-      upper_rank_ = upper_codeword;
-    }
-  }
-  else {
-    upper_rank_ = ranked_dict_.size();
-  }
-  LOG(INFO) << "Lower codeword: " << lower_codeword << ", Upper codeword: " << upper_codeword;
-  LOG(INFO) << "Lower rank: " << lower_rank_<< ", Upper rank: " << upper_rank_;
-  prepared_ = true;
-}
-
 Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
                                                  size_t& offset,
                                                  size_t& n,
@@ -408,10 +244,7 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
       ctx->eval_complete() = true;
       break;
   }
-
-  // Prepare the upper and lower codeword bounds
-  PrepareScan(ctx);
-  // check if should short circuit
+  // ASSERT_NOT_NULL(bounds)
 
   BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
 
@@ -432,18 +265,20 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     CHECK(out_arena->RelocateSlice(elem, out));
     out++;
 
-    if (ctx->pred().predicate_type() == PredicateType::Equality && ranked_dict_[codeword] == lower_rank_) {
+    if (ctx->pred().predicate_type() == PredicateType ::Equality && dict_decoder_->RankOfCodeword(codeword)) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
     }
-    else if (ranked_dict_[codeword] >= lower_rank_ && ranked_dict_[codeword] < upper_rank_) {
+    else if (dict_decoder_->RankOfCodeword(codeword) >= lower_rank_ && dict_decoder_->RankOfCodeword(codeword) < upper_rank_) {
       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
+    }
+    else {
+
     }
   }
   offset += n;
   return Status::OK();
 }
 
-// Overall process is O(n) where n is the number of strings to decode
 Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* dst) {
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);

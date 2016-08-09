@@ -44,8 +44,10 @@
 #include "kudu/cfile/block_encodings.h"
 #include "kudu/cfile/block_pointer.h"
 #include "kudu/cfile/cfile.pb.h"
+#include "kudu/cfile/cfile_reader.h"
 #include "kudu/cfile/bshuf_block.h"
 #include "kudu/cfile/binary_plain_block.h"
+#include "kudu/cfile/sorted_plain_block.h"
 #include "kudu/gutil/gscoped_ptr.h"
 #include "kudu/gutil/map-util.h"
 #include "kudu/gutil/strings/stringpiece.h"
@@ -101,11 +103,11 @@ class BinaryDictBlockBuilder : public BlockBuilder {
   // dict_block_, dictionary_, dictionary_strings_arena_
   // is related to the dictionary block (one per cfile).
   // They should NOT be clear in the Reset() method.
-  BinaryPlainBlockBuilder dict_block_;
+  SortedPlainBlockBuilder dict_block_;
 
   // Use a sorted_map to avoid having to double-store StringPieces
-  std::map<StringPiece, uint32_t> dictionary_;
-  //  std::unordered_map<StringPiece, uint32_t, GoodFastHash<StringPiece> > dictionary_;
+  //  std::map<StringPiece, uint32_t> dictionary_;
+  std::unordered_map<StringPiece, uint32_t, GoodFastHash<StringPiece> > dictionary_;
 
   // Memory to hold the actual content for strings in the dictionary_.
   //
@@ -130,7 +132,6 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   virtual Status ParseHeader() OVERRIDE;
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
   virtual Status SeekAtOrAfterValue(const void* value, bool* exact_match) OVERRIDE;
-  Status SeekAtOrAfterDictValue(const void* word, bool* exact_match, uint32_t& idx);
   Status CopyNextValues(size_t* n, ColumnDataView* dst) OVERRIDE;
 
   virtual bool HasNext() const OVERRIDE {
@@ -159,26 +160,15 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
  private:
   Status CopyNextDecodeStrings(size_t* n, ColumnDataView* dst);
-  uint32_t word_at_index(uint32_t index);
-  void PrepareScan(ColumnEvalContext *ctx);
   Slice data_;
+  bool parsed_;
   uint32_t lower_rank_;
   uint32_t upper_rank_;
-  std::vector<uint32_t> ranked_dict_;
-  bool parsed_;
-  bool prepared_;
 
   // Dictionary block decoder
-  BinaryPlainBlockDecoder* dict_decoder_;
-
+  SortedPlainBlockDecoder *dict_decoder_;
   gscoped_ptr<BlockDecoder> data_decoder_;
   gscoped_ptr<BShufBlockDecoder<UINT32>> sort_decoder_;
-
-  // codeword_ranking_[i] > codeword_ranking_[j] implies the codeword[i] > codeword[j]
-  // may need to do some sorting or access an extra block to get the ordering
-  // std::vector<uint32_t> codeword_ranking_;
-
-
   DictEncodingMode mode_;
 
   // buffer to hold the codewords, needed by CopyNextDecodeStrings()

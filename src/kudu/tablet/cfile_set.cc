@@ -506,6 +506,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   if (!ctx->eval_complete()) {
     ctx->pred().Evaluate(*ctx->block(), ctx->sel());
   }
+  return Status::OK();
 }
 
 Status CFileSet::Iterator::FinishBatch() {

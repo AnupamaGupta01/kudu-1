@@ -200,7 +200,7 @@ class CFileSet::Iterator : public ColumnwiseIterator {
 
   // Prepare the given column if not already prepared.
   Status PrepareColumn(size_t col_idx);
-  Status PrepareColumn(ColumnEvalPredicate *ctx);
+  Status PrepareColumn(ColumnEvalContext *ctx);
 
   const std::shared_ptr<CFileSet const> base_data_;
   const Schema* projection_;

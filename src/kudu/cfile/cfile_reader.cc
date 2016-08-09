@@ -522,6 +522,7 @@ CFileIterator::CFileIterator(CFileReader* reader,
                              CFileReader::CacheControl cache_control)
   : reader_(reader),
     seeked_(nullptr),
+    ctx_(nullptr),
     prepared_(false),
     cache_control_(cache_control),
     last_prepare_idx_(-1),
@@ -532,8 +533,8 @@ CFileIterator::~CFileIterator() {
 }
 
 Status CFileIterator::PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) {
-  //TODO: prepare decoder metadata (e.g. bounds of codeword rankings)
-  RETURN_NOT_OK(SeekToOrdinal(ord_idx));
+  ctx_ = ctx;
+  return SeekToOrdinal(ord_idx);
 }
 
 Status CFileIterator::SeekToOrdinal(rowid_t ord_idx) {
@@ -693,13 +694,6 @@ Status CFileIterator::SeekAtOrAfter(const EncodedKey &key,
   return Status::OK();
 }
 
-void CFileIterator::GetDictMetadata(ColumnEvalContext *ctx,
-                                    uint32_t& upper_rank,
-                                    uint32_t& lower_rank,
-                                    std::vector<uint32_t>& ranked_dict) {
-
-}
-
 
 Status CFileIterator::PrepareForNewSeek() {
   // Fully open the CFileReader if it was lazily opened earlier.
@@ -728,10 +722,18 @@ Status CFileIterator::PrepareForNewSeek() {
     RETURN_NOT_OK_PREPEND(reader_->ReadBlock(bp, CFileReader::CACHE_BLOCK, &dict_block_handle_),
                           "Couldn't read dictionary block");
 
-    dict_decoder_.reset(new BinaryPlainBlockDecoder(dict_block_handle_.data()));
+    dict_decoder_.reset(new SortedPlainBlockDecoder(dict_block_handle_.data()));
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
 
-
+    bool upper_exact, lower_exact = false;
+    uint32_t lower_codeword, upper_codeword = 0;
+    if (ctx_ != nullptr) {
+      // Get the upper and lower bounds for the scan
+      dict_decoder_->SeekAtOrAfterWord(ctx_->pred().raw_lower(), &lower_exact, lower_codeword);
+      dict_decoder_->SeekAtOrAfterWord(ctx_->pred().raw_upper(), &upper_exact, upper_codeword);
+      dict_predicate_ = gscoped_ptr<DictPredicate>(new DictPredicate(dict_decoder_->RankOfCodeword(lower_codeword),
+                                          dict_decoder_->RankOfCodeword(upper_codeword)));
+    }
   }
 
   seeked_ = nullptr;

@@ -43,6 +43,7 @@
 #include "kudu/util/status.h"
 #include "kudu/common/iterator_stats.h"
 #include "kudu/common/key_encoder.h"
+#include "sorted_plain_block.h"
 
 namespace kudu {
 namespace cfile {
@@ -207,7 +208,7 @@ class CFileReader {
 class ColumnIterator {
  public:
   virtual ~ColumnIterator() {}
-
+  virtual Status PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) = 0;
   // Seek to the given ordinal entry in the file.
   // Entry 0 is the first entry written to the file.
   // If provided seek point is past the end of the file,
@@ -273,7 +274,7 @@ class DefaultColumnValueIterator : public ColumnIterator {
   DefaultColumnValueIterator(const TypeInfo* typeinfo, const void *value)
     : typeinfo_(typeinfo), value_(value), ordinal_(0) {
   }
-
+  Status PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) OVERRIDE { return SeekToOrdinal(ord_idx); } ;
   Status SeekToOrdinal(rowid_t ord_idx) OVERRIDE;
 
   bool seeked() const OVERRIDE { return true; }
@@ -296,12 +297,22 @@ class DefaultColumnValueIterator : public ColumnIterator {
   IteratorStats io_stats_;
 };
 
+struct DictPredicate {
+  // TODO: this can be abstracted, maybe include an evaluation function
+  uint32_t lower_rank;
+  uint32_t upper_rank;
+  DictPredicate(uint32_t lower, uint32_t upper) {
+    lower_rank = lower;
+    upper_rank = upper;
+  }
+};
 
 class CFileIterator : public ColumnIterator {
  public:
   CFileIterator(CFileReader* reader,
                 CFileReader::CacheControl cache_control);
   ~CFileIterator();
+  Status PrepareScan(rowid_t ord_idx, ColumnEvalContext *ctx) OVERRIDE;
 
   // Seek to the first entry in the file. This works for both
   // ordinal-indexed and value-indexed files.
@@ -376,8 +387,8 @@ class CFileIterator : public ColumnIterator {
   // If the column is dictionary-coded, returns the decoder
   // for the cfile's dictionary block. This is called by the
   // StringDictBlockDecoder.
-  BinaryPlainBlockDecoder* GetDictDecoder() { return dict_decoder_.get();}
-  void GetDictMetadata(uint32_t& upper_rank, uint32_t& lower_rank, std::vector<uint32_t>& ranked_dict);
+  SortedPlainBlockDecoder* GetDictDecoder() { return dict_decoder_.get();}
+  DictPredicate* GetDictPredicate() { return dict_predicate_.get();}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CFileIterator);
@@ -440,23 +451,24 @@ class CFileIterator : public ColumnIterator {
   // seek-related state.
   Status PrepareForNewSeek();
 
-  // Fully initialize the underlying cfile reader if needed, do any preprocessing for a given block
-  // e.g. get a sorted order for a dictionary block and the rankings for the predicate bounds,
-  //      get the lower and upper bounds of a bitpacked block
-  Status PrepareScan(rowid_t ord_idx, ColumnEvalContext* ctx);
-
   CFileReader* reader_;
+
+  //  uint32_t lower_rank_;
+  //  uint32_t upper_rank_;
+  gscoped_ptr<DictPredicate> dict_predicate_;
 
   gscoped_ptr<IndexTreeIterator> posidx_iter_;
   gscoped_ptr<IndexTreeIterator> validx_iter_;
 
   // Decoder for the dictionary block
-  gscoped_ptr<BinaryPlainBlockDecoder> dict_decoder_;
+  gscoped_ptr<SortedPlainBlockDecoder> dict_decoder_;
   BlockHandle dict_block_handle_;
 
   // The currently in-use index iterator. This is equal to either
   // posidx_iter_.get(), validx_iter_.get(), or NULL if not seeked.
   IndexTreeIterator *seeked_;
+
+  ColumnEvalContext *ctx_;
 
   // Data blocks that contain data relevant to the currently Prepared
   // batch of rows.
