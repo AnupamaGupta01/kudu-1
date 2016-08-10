@@ -1021,7 +1021,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
   DCHECK_LE(rem, ctx->block()->nrows());
 
   // Start with the SelectionVector completely empty and work up from there
-  ctx->sel()->SetAllFalse();
+  // The SelectionVector is shared among the columns
   size_t offset = 0;
   for (PreparedBlock *pb : prepared_blocks_) {
     if (pb->needs_rewind_) {

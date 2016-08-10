@@ -56,7 +56,7 @@ void BinaryDictBlockBuilder::Reset() {
   if (mode_ == kCodeWordMode &&
       dict_block_.IsBlockFull(options_->storage_attributes.cfile_block_size)) {
     mode_ = kPlainBinaryMode;
-    data_builder_.reset(new SortedVocabBlockBuilder(options_));
+    data_builder_.reset(new BinaryPlainBlockBuilder(options_));
   } else {
     data_builder_->Reset();
   }
@@ -228,6 +228,10 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
                                                  size_t& offset,
                                                  size_t& n,
                                                  ColumnDataView* dst) {
+  if (mode_ == kPlainBinaryMode) {
+    ctx->eval_complete() = false;
+    return Status::OK();
+  }
   switch (ctx->pred().predicate_type()) {
     case PredicateType::None:
       ctx->eval_complete() = true;
@@ -258,15 +262,20 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     
     // CopyNextDecodeStrings, append the string to out_arena with index out
     Slice elem = dict_decoder_->string_at_index(codeword);
-    CHECK(out_arena->RelocateSlice(elem, out));
-    out++;
 
     if (ctx->pred().predicate_type() == PredicateType ::Equality && dict_decoder_->RankOfCodeword(codeword)) {
-      BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
+      CHECK(out_arena->RelocateSlice(elem, out));
     }
     else if (dict_decoder_->RankOfCodeword(codeword) >= lower_rank_ && dict_decoder_->RankOfCodeword(codeword) < upper_rank_) {
-      BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
+      CHECK(out_arena->RelocateSlice(elem, out));
     }
+    else {
+      BitmapClear(ctx->sel()->mutable_bitmap(), offset+i);
+      *out = Slice();
+      // CHECK(out_arena->RelocateSlice(elem, out));
+    }
+    out++;
+
   }
   offset += n;
   return Status::OK();
