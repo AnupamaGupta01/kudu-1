@@ -1,7 +1,7 @@
 #!/usr/bin/python
 import subprocess
-import scipy
-from plot_times import *
+import re
+import matplotlib.pyplot as plt
 
 # grep through $log for the real times
 
@@ -27,15 +27,14 @@ def main():
       times = []
       for cardinality in cardinalities_list:
         t_list = []
-        for i in range(nrepeats):
-          subprocess.call(["./plot_pred_pushed_times.sh", str(nrows), str(cardinality), str(strlen), "21"])
-          log_file = open(log)
-          for line in log_file:
-            line = line.rstrip()
-            if re.search("Time spent Filtering by string value:", line):
-              t = re.findall("Filtering by string value: real ([0-9.]+)s\s+user", line)
-              if len(t) > 0:
-                t_list.append(float(t[0]))
+        subprocess.call(["./plot_pred_pushed_times.sh", str(nrows), str(cardinality), str(strlen), "21", str(nrepeats)])
+        log_file = open(log)
+        for line in log_file:
+          line = line.rstrip()
+          if re.search("Time spent Filtering by string value:", line):
+            t = re.findall("Filtering by string value: real ([0-9.]+)s\s+user", line)
+            if len(t) > 0:
+              t_list.append(float(t[0]))
         # Add the data for a single set of parameters (nrepeats runs)
         cardinalities.append(cardinality)
         xs.append(strlen)

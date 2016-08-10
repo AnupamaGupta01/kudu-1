@@ -280,12 +280,13 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
     
     // CopyNextDecodeStrings, append the string to out_arena with index out
     Slice elem = dict_decoder_->string_at_index(codeword);
-    CHECK(out_arena->RelocateSlice(elem, out));
-    out++;
-
-     if (BitmapTest(pred_set_->bitmap(), codeword)) {
-       BitmapSet(ctx->sel()->mutable_bitmap(), offset+i);
+    if (BitmapTest(pred_set_->bitmap(), codeword)) {
+      CHECK(out_arena->RelocateSlice(elem, out));
     }
+    else {
+      BitmapClear(ctx->sel()->mutable_bitmap(), offset+i);
+    }
+    out++;
   }
   offset += n;
   return Status::OK();

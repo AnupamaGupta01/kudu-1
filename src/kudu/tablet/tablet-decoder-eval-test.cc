@@ -30,7 +30,7 @@ DEFINE_int32(nrows, 1000000, " ");
 DEFINE_int32(cardinality, 10, " ");
 DEFINE_int32(strlen, 64, " ");
 DEFINE_int32(pred_upper, 21, " ");
-
+DEFINE_bool(pushdown, true, " ");
 
 class TabletDecoderEvalTest : public KuduTabletTest,
                               public ::testing::WithParamInterface<Setup> {
@@ -94,8 +94,12 @@ public:
 
     int fetched = 0;
     LOG_TIMING(INFO, "Filtering by string value") {
-      ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
-//      ASSERT_OK(SilentIterateToStringList(iter.get(), fetched));
+			if (FLAGS_pushdown) {
+        ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
+      }
+			else {
+        ASSERT_OK(SilentIterateToStringList(iter.get(), fetched));
+			}
     }
     LOG(INFO) << "Nrows: " << FLAGS_nrows <<  ", Cardinality: " << FLAGS_cardinality << ", strlen: " << FLAGS_strlen << ", Expected: " << \
       expected_sel_count << ", Actual: " << fetched;
@@ -148,6 +152,7 @@ int main(int argc, char *argv[]) {
   FLAGS_cardinality = 100;
   FLAGS_strlen = 64;
   FLAGS_pred_upper = 20;
+  FLAGS_pushdown = true;
   kudu::ParseCommandLineFlags(&argc, &argv, true);
 
   google::InstallFailureSignalHandler();
