@@ -814,6 +814,10 @@ bool DeltaFileIterator::HasNext() {
   return !exhausted_ || !delta_blocks_.empty();
 }
 
+bool DeltaFileIterator::HasUpdates() {
+  return HasNext();
+}
+
 string DeltaFileIterator::ToString() const {
   return "DeltaFileIterator(" + dfr_->ToString() + ")";
 }

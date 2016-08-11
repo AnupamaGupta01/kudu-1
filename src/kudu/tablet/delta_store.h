@@ -172,7 +172,7 @@ class DeltaIterator {
 
   // Returns true if there are any more rows left in this iterator.
   virtual bool HasNext() = 0;
-
+  virtual bool HasUpdates() = 0;
   // Return a string representation suitable for debug printouts.
   virtual std::string ToString() const = 0;
 

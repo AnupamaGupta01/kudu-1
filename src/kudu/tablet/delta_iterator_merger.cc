@@ -110,7 +110,14 @@ bool DeltaIteratorMerger::HasNext() {
 
   return false;
 }
-
+bool DeltaIteratorMerger::HasUpdates() {
+  for (const unique_ptr<DeltaIterator>& iter : iters_) {
+    if (iter->HasUpdates()) {
+      return true;
+    }
+  }
+  return false;
+}
 string DeltaIteratorMerger::ToString() const {
   string ret;
   ret.append("DeltaIteratorMerger(");

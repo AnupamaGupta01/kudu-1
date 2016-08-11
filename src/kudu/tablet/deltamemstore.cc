@@ -363,6 +363,15 @@ bool DMSIterator::HasNext() {
   return false;
 }
 
+bool DMSIterator::HasUpdates() {
+  for (auto& col: updates_by_col_) {
+    if (col.size() > 0) {
+      return true;
+    }
+  }
+  return deletes_and_reinserts_.size() > 0;
+}
+
 string DMSIterator::ToString() const {
   return "DMSIterator";
 }

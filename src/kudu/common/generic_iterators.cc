@@ -569,7 +569,7 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(ctx));
 
     if (!eval_complete) {
-      RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
+//      RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
       get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
     }
     if (!dst->selection_vector()->AnySelected()) {
