@@ -134,13 +134,13 @@ class BlockDecoder {
   // allocated in the dst block's arena.
   virtual Status CopyNextValues(size_t *n, ColumnDataView *dst) = 0;
 
-  // offset: index in ctx->sel() that the decoder stores
-  // n: number of elements to be read from the decoder
-  // dst: stores the data
-  virtual Status EvaluatePredicate(ColumnEvalContext *ctx,
-                           size_t& offset,
-                           size_t& n,
-                           ColumnDataView* dst) {
+  // Fetch the next n values from the block that satisfy the predicate
+  // in ctx. Mark the selection vector starting at the given offset, as
+  // this offset is the current location in the CFile
+  virtual Status CopyNextAndEval(ColumnEvalContext *ctx,
+                                 size_t &offset,
+                                 size_t &n,
+                                 ColumnDataView *dst) {
     CopyNextValues(&n, dst);
     ctx->eval_complete() = false;
     return Status::OK();

@@ -149,10 +149,10 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
   static const size_t kMinHeaderSize = sizeof(uint32_t) * 1;
 
-  Status EvaluatePredicate(ColumnEvalContext *ctx,
-                           size_t& offset,
-                           size_t& n,
-                           ColumnDataView* dst) OVERRIDE;
+  Status CopyNextAndEval(ColumnEvalContext *ctx,
+                         size_t &offset,
+                         size_t &n,
+                         ColumnDataView *dst) OVERRIDE;
 
 
  private:

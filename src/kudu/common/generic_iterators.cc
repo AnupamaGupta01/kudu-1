@@ -514,6 +514,7 @@ bool MaterializingIterator::HasNext() const {
 }
 
 Status MaterializingIterator::NextBlock(RowBlock* dst) {
+  return PredPushedNextBlock(dst);
   size_t n = dst->row_capacity();
   if (dst->arena()) {
     dst->arena()->Reset();
@@ -562,14 +563,13 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
                                                    &dst_col,
                                                    dst->selection_vector(),
                                                    eval_complete);
-    // implemented in cfile_set.cc
+
     // Call Scan on the iterator such that dst_col gets populated with all the data for the column
     // and selection_vector is filled out appropriately. If this cannot be done by the iterator,
     // eval_complete should be set to false, and Evaluate will be called on the data.
     RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(ctx));
 
     if (!eval_complete) {
-//      RETURN_NOT_OK(iter_->InitializeSelectionVector(dst->selection_vector()));
       get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
     }
     if (!dst->selection_vector()->AnySelected()) {

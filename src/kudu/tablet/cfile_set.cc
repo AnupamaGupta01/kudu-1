@@ -494,22 +494,14 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   DCHECK_LT(ctx->col_idx(), col_iters_.size());
 
   // PrepareColumn calls SeekToOrdinal(&idx) on the correct block and this will call PrepareForNewSeek
-  // PrepareForNewSeek is the function that creates a new BinaryPlainBlock that contains the dictionary for the dict block
-  //
+  // PrepareForNewSeek is the function that creates a new BinaryPlainBlock that contains the vocab for the dict block
   RETURN_NOT_OK(PrepareColumn(ctx));
   ColumnIterator* iter = col_iters_[ctx->col_idx()];
-
-  // implemented in cfile_reader.cc
-  // return iter->Scan(dst);
-  return iter->Scan(ctx);
-  // alternatively, iter->GetDecoders() to get to the decoders and then call the dblk->EvaluatePredicate
-  // iter->GetDecoders(rle_decoder, std::vector<dblk>)
-  //   rle_decoder: if null, proceed as with Scan::else, otherwise do RLE while loop
-  // 
-  // do the normal Scan() calls and also dblk->EvalPredicate
-  // bool is_nullable;
-  // std::vector<PreparedBlock> prepared_blocks = iter->GetBlocks(is_nullable);
-
+  RETURN_NOT_OK(iter->Scan(ctx));
+  if (!ctx->eval_complete()) {
+    ctx->pred().Evaluate(*ctx->block(), ctx->sel());
+  }
+  return Status::OK();
 }
 
 Status CFileSet::Iterator::FinishBatch() {

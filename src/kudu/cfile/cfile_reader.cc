@@ -927,15 +927,6 @@ Status CFileIterator::FinishBatch() {
   return Status::OK();
 }
 
-// std::vector<PreparedBlock> CFileIterator::GetBlocks(bool& is_nullable) {
-//   // Rather than going through this Scan()
-//   // 
-//   // TODO: all the checks in Scan
-//   CHECK(seeked_) << "not seeked";
-//   is_nullable = reader_->is_nullable();
-//   return &prepared_blocks_;
-// }
-
 Status CFileIterator::Scan(ColumnBlock *dst) {
   CHECK(seeked_) << "not seeked";
   // LOG(INFO) << "Scan called from CFileIterator";
@@ -1064,8 +1055,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
         size_t this_batch = nblock;
         if (not_null) {
           // TODO: Maybe copy all and shift later?
-          // RETURN_NOT_OK(pb->dblk_->CopyNextValues(&this_batch, &remaining_dst));
-          RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(ctx, offset, this_batch, &remaining_dst));
+          RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, offset, this_batch, &remaining_dst));
           DCHECK_EQ(nblock, this_batch);
           pb->needs_rewind_ = true;
         } else {
@@ -1090,8 +1080,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
 
       // Write the block to the remaining_dst, optionally writing to sel
       // If sel gets written to, eval_complete will be set to true
-      RETURN_NOT_OK(pb->dblk_->EvaluatePredicate(ctx, offset, this_batch, &remaining_dst));
-
+      RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, offset, this_batch, &remaining_dst));
 
       pb->needs_rewind_ = true;
       DCHECK_LE(this_batch, rem);

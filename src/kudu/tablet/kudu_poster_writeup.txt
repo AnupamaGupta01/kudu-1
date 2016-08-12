@@ -1,0 +1,14 @@
+Data in Kudu are stored on disk in encoded form. Each block is read in batches of 1000 by default, and each CFile has many blocks.
+
+When a predicate is evaluated, each block is decoded, the data are copied into a buffer, and evaluated cell-by-cell. For dictionary-encoded blocks, the the string corresponding to the underlying integer codewords are copied for every row in the block. At this point, the predicate is evaluated by comparing each string against its upper and lower bounds.
+
+The on-disk formats can be exploited to make predicate-evaluation much faster. Comparisons can be done on the integers instead of strings, reducing the amount of CPU. Furthermore, extraneous memcpy operations can be avoided for cells that do not satisfy the predicate.
+
+Implementation details:
+- Architectural changes to reduce redundancies
+  Operations done when opoening up a new vocab block, shared among the 
+  
+- Coming up with the correct set of integers that satisfy the predicate.
+  1. Sorting the dictionary block, allows for O(log k) predicate evaluation
+     Costs O(k) space and O(k log k) in-memory sort
+  2. Generate a set of integers that satisfy the predicate

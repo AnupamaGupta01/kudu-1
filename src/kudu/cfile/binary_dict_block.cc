@@ -216,7 +216,6 @@ void BinaryDictBlockDecoder::SeekToPositionInBlock(uint pos) {
   data_decoder_->SeekToPositionInBlock(pos);
 }
 
-// value_void is the string word
 Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* exact) {
   if (mode_ == kCodeWordMode) {
     DCHECK(value_void != nullptr);
@@ -240,45 +239,38 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
 }
 
 
-Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
-                                                 size_t& offset,
-                                                 size_t& n,
-                                                 ColumnDataView* dst) {
-  // Set eval_complete depending on the predicate type
-  switch (ctx->pred().predicate_type()) {
-    case PredicateType::None:
-      ctx->eval_complete() = true;
-      return Status::OK();
-    case PredicateType::IsNotNull:
-      ctx->eval_complete() = false;
-      return Status::OK();
-    case PredicateType::Range:
-    case PredicateType::Equality:
-      ctx->eval_complete() = true;
-      break;
+Status BinaryDictBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
+                                               size_t &offset,
+                                               size_t &n,
+                                               ColumnDataView *dst) {
+  if (mode_ == kPlainBinaryMode) {
+    ctx->eval_complete() = false;
+    // Could implement CopyNextAndEval for every block
+    // These could copy and evaluate Slice-by-Slice
+    return data_decoder_->CopyNextValues(&n, dst);
   }
-  // TODO make this O(1)
-  if (!pred_set_->AnySelected()) {
-    ctx->eval_complete() = true;
+
+  ctx->eval_complete() = true;
+  // IsNotNull predicates should return all data
+  if (ctx->pred().predicate_type() == PredicateType::IsNotNull) {
+    return CopyNextDecodeStrings(&n, dst);
+  }
+  // None predicates or unsatisfied predicates should return no data
+  if (!pred_set_->AnySelected() || ctx->pred().predicate_type() == PredicateType::None) {
     return Status::OK();
   }
 
-  BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
-
   // Copy the words of the data block into a buffer so that we can easily access the UINT32s
   // Load the rows' codeword values into a buffer for scanning
+  BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
   codeword_buf_.resize(n*sizeof(uint32_t));
   d_bptr->CopyNextValuesToArray(&n, codeword_buf_.data());
 
-  // O(n) for ordered set
   // iterate through the data and check which satisfy the predicate
-  // regardless of whether it satisfies, put it to the output buffer
   Slice* out = reinterpret_cast<Slice*>(dst->data());
   Arena* out_arena = dst->arena();
   for (size_t i = 0; i < n; i++) {
     uint32_t codeword = *reinterpret_cast<uint32_t*>(&codeword_buf_[i*sizeof(uint32_t)]);
-    
-    // CopyNextDecodeStrings, append the string to out_arena with index out
     Slice elem = dict_decoder_->string_at_index(codeword);
     if (BitmapTest(pred_set_->bitmap(), codeword)) {
       CHECK(out_arena->RelocateSlice(elem, out));
@@ -292,7 +284,6 @@ Status BinaryDictBlockDecoder::EvaluatePredicate(ColumnEvalContext *ctx,
   return Status::OK();
 }
 
-// Overall process is O(n) where n is the number of strings to decode
 Status BinaryDictBlockDecoder::CopyNextDecodeStrings(size_t* n, ColumnDataView* dst) {
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);

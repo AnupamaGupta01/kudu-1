@@ -8,7 +8,7 @@
 // the decoders during predicate pushdown
 namespace kudu {
 
-
+// TODO: add an offset to keep track of which rows in the SelectionVector/CFile have already been evaluated
 class ColumnEvalContext {
 public:
   ColumnEvalContext(const size_t col_idx,

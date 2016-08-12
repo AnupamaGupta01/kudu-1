@@ -28,8 +28,9 @@ def getMeanTime(nrows, cardn, strlen, nrepeats, pushdown):
 
 def compare():
   nrows = 1000000
-  cardns_list = [10, 100, 500, 1000]
-  strlen_list = [5, 50, 100, 150]
+  cardns_list = [10, 100, 5000, 60000]
+  # cardns_list = [9, 99, 333, 1832]
+  strlen_list = [50, 100, 150]
   fig = plt.figure()
   nrepeats = 10
   width = 0.3
@@ -52,8 +53,8 @@ def compare():
       ax.set_ylabel("Real time(s)")
     if ylim == 0:
       ylim = max(regular_times)*1.25
-    pd = ax.bar(inds+0.5*width, np.array(pushdown_times)+0, width, color='r', edgecolor='r')
-    rg = ax.bar(inds+1.5*width+0.01, np.array(regular_times)+0, width, color='b', edgecolor='b')
+    pd = ax.bar(inds+0.5*width, np.array(pushdown_times)+0, width, color='dodgerblue', edgecolor='dodgerblue')
+    rg = ax.bar(inds+1.5*width+0.01, np.array(regular_times)+0, width, color='skyblue', edgecolor='skyblue')
     ax.set_ylim(0, ylim)
     ax.set_xticks(inds+width)
     ax.set_title("Cardinality: "+str(cardn))

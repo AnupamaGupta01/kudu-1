@@ -490,25 +490,22 @@ class CFileIterator : public ColumnIterator {
   // a temporary buffer for encoding
   faststring tmp_buf_;
 
-  // Function to be used in generating dictionary metadata (e.g. predicate set)
-  static bool CompareRange(Slice& str, const void *lower, const void *upper, bool equality) {
-    // will return true only if str is between [lower, upper)
+  // Used in generating dictionary metadata (e.g. predicate set)
+  // will return true only if cell is between [lower, upper)
+  static bool CompareRange(Slice& cell, const void *lower, const void *upper, bool equality) {
     if (equality) {
-      // this is an equality predicate
-      return str.compare(*static_cast<const Slice*>(lower)) == 0;
+      // Given an equality predicate, only need to evaluate against the lower bound
+      return cell.compare(*static_cast<const Slice*>(lower)) == 0;
     }
     if (!upper) {
-      // this is a lower bound, lower should be greater than str
-      return str.compare(*static_cast<const Slice*>(lower)) >= 0;
+      return cell.compare(*static_cast<const Slice*>(lower)) >= 0;
     }
     else if (!lower) {
-      // this is an upper bound, upper should be less than str
-      return str.compare(*static_cast<const Slice*>(upper)) < 0;
+      return cell.compare(*static_cast<const Slice*>(upper)) < 0;
     }
     else {
-      // both bounds exist, get stuff between them
-      return str.compare(*static_cast<const Slice*>(lower)) >= 0 &&
-             str.compare(*static_cast<const Slice*>(upper)) < 0;
+      return cell.compare(*static_cast<const Slice*>(lower)) >= 0 &&
+             cell.compare(*static_cast<const Slice*>(upper)) < 0;
     }
   }
 };
