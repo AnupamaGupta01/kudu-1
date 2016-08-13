@@ -23,8 +23,8 @@ enum Setup {
 };
 
 // These are the default values
-DEFINE_int32(nrows, 10000, "Number of rows generated per tablet");
-DEFINE_int32(cardinality, 6666, "Cardinality of the string column");
+DEFINE_int32(nrows, 1000000, "Number of rows generated per tablet");
+DEFINE_int32(cardinality, 66666, "Cardinality of the string column");
 DEFINE_int32(strlen, 64, "Length of each word in the string column");
 DEFINE_int32(pred_upper, 21, "Upper bound on the predicate [0, p)");
 DEFINE_int32(nrepeats, 1, "Number of times to repeat per tablet");
@@ -153,18 +153,8 @@ TEST_P(TabletDecoderEvalTest, TestMultiTabletBenchmark) {
 }
 
 int main(int argc, char *argv[]) {
-//  FLAGS_nrows = 100000;
-//  FLAGS_cardinality = 100;
-//  FLAGS_strlen = 64;
-//  FLAGS_pred_upper = 20;
-//  FLAGS_nrepeats = 1;
-//  FLAGS_pushdown = true;
   kudu::ParseCommandLineFlags(&argc, &argv, true);
-
-  google::InstallFailureSignalHandler();
-  ::testing::InitGoogleTest(&argc, argv);
-  int ret = RUN_ALL_TESTS();
-  return ret;
+  return 0;
 }
 
 INSTANTIATE_TEST_CASE_P(AllDisk, TabletDecoderEvalTest, ::testing::Values(ALL_ON_DISK));

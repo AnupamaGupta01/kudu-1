@@ -150,7 +150,7 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   static const size_t kMinHeaderSize = sizeof(uint32_t) * 1;
 
   Status CopyNextAndEval(ColumnEvalContext *ctx,
-                         size_t &offset,
+                         SelectionVectorView *sel,
                          size_t &n,
                          ColumnDataView *dst) OVERRIDE;
 

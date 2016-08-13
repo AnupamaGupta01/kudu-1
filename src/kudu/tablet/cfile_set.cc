@@ -500,6 +500,7 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   RETURN_NOT_OK(iter->Scan(ctx));
   if (!ctx->eval_complete()) {
     ctx->pred().Evaluate(*ctx->block(), ctx->sel());
+    ctx->eval_complete() = true;
   }
   return Status::OK();
 }

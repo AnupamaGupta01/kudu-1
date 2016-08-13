@@ -112,6 +112,12 @@ class ColumnPredicate {
   // outlive the merged predicate.
   void Merge(const ColumnPredicate& other);
 
+  // Evaluate the predicate on a single cell
+  //
+  // This should only be called a query has ranges specified
+  // i.e. None predicates and IsNotNull predicates should not use this
+  bool EvaluateCell(const Slice& cell) const;
+
   // Evaluate the predicate on every row in the column block.
   //
   // This is evaluated as an 'AND' with the current contents of *sel:

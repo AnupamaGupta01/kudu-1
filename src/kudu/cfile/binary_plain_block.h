@@ -88,6 +88,10 @@ class BinaryPlainBlockDecoder : public BlockDecoder {
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
   virtual Status SeekAtOrAfterValue(const void *value,
                                     bool *exact_match) OVERRIDE;
+  Status CopyNextAndEval(ColumnEvalContext *ctx,
+                         SelectionVectorView *sel,
+                         size_t &n,
+                         ColumnDataView *dst) OVERRIDE;
   Status CopyNextValues(size_t *n, ColumnDataView *dst) OVERRIDE;
 
   virtual bool HasNext() const OVERRIDE {

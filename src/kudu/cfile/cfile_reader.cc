@@ -510,7 +510,7 @@ Status DefaultColumnValueIterator::Scan(ColumnBlock *dst)  {
 }
 
 Status DefaultColumnValueIterator::Scan(ColumnEvalContext *ctx) {
-  // TODO: fill this out
+  ctx->eval_complete() = false;
   return Scan(ctx->block());
 }
 
@@ -727,20 +727,20 @@ Status CFileIterator::PrepareForNewSeek() {
     dict_decoder_.reset(new BinaryPlainBlockDecoder(dict_block_handle_.data()));
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
 
-    // Set the predicate-satisfying set
     if (ctx_) {
+      // Store the codewords that satisfy the predicate to some set structure (set, unordered_set, etc.)
       size_t nwords = dict_decoder_->Count();
       pred_set_.reset(new SelectionVector(nwords));
       pred_set_->SetAllFalse();
       for (size_t i = 0; i < nwords; i++) {
         Slice cur_string = dict_decoder_->string_at_index(i);
-        // Store the codewords that satisfy the predicate to some storage (set, unordered_set, etc.)
-        if (CompareRange(cur_string, ctx_->pred().raw_lower(), ctx_->pred().raw_upper(),
-                         ctx_->pred().predicate_type() == PredicateType::Equality)) {
+        if (ctx_->pred().EvaluateCell(cur_string)) {
           BitmapSet(pred_set_->mutable_bitmap(), i);
         }
       }
+#ifndef NDEBUG
       LOG(INFO) << BitmapToString(pred_set_->bitmap(), pred_set_->nrows());
+#endif
     }
   }
 
@@ -1021,12 +1021,11 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
 
   // Use a column data view to been able to advance it as we read into it.
   ColumnDataView remaining_dst(ctx->block());
-
+  SelectionVectorView remaining_sel(ctx->sel());
   uint32_t rem = last_prepare_count_;
   DCHECK_LE(rem, ctx->block()->nrows());
 
   // Start with the SelectionVector completely empty and work up from there
-  size_t offset = 0;
   for (PreparedBlock *pb : prepared_blocks_) {
 
     if (pb->needs_rewind_) {
@@ -1055,7 +1054,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
         size_t this_batch = nblock;
         if (not_null) {
           // TODO: Maybe copy all and shift later?
-          RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, offset, this_batch, &remaining_dst));
+          RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, &remaining_sel, this_batch, &remaining_dst));
           DCHECK_EQ(nblock, this_batch);
           pb->needs_rewind_ = true;
         } else {
@@ -1080,7 +1079,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
 
       // Write the block to the remaining_dst, optionally writing to sel
       // If sel gets written to, eval_complete will be set to true
-      RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, offset, this_batch, &remaining_dst));
+      RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, &remaining_sel, this_batch, &remaining_dst));
 
       pb->needs_rewind_ = true;
       DCHECK_LE(this_batch, rem);

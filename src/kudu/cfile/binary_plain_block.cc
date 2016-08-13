@@ -255,6 +255,41 @@ Status BinaryPlainBlockDecoder::SeekAtOrAfterValue(const void *value_void, bool 
   return Status::OK();
 }
 
+Status BinaryPlainBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
+                       SelectionVectorView *sel,
+                       size_t &n,
+                       ColumnDataView *dst) {
+  DCHECK(parsed_);
+  CHECK_EQ(dst->type_info()->physical_type(), BINARY);
+  DCHECK_LE(n, dst->nrows());
+  DCHECK_EQ(dst->stride(), sizeof(Slice));
+
+  Arena *out_arena = dst->arena();
+  if (PREDICT_FALSE(n == 0 || cur_idx_ >= num_elems_)) {
+    n = 0;
+    return Status::OK();
+  }
+  size_t max_fetch = std::min(n, static_cast<size_t>(num_elems_ - cur_idx_));
+
+  Slice *out = reinterpret_cast<Slice *>(dst->data());
+  size_t i;
+  for (i = 0; i < max_fetch; i++) {
+    Slice elem(string_at_index(cur_idx_));
+    if (string_at_index(cur_idx_).compare(*static_cast<const Slice*>(ctx->pred().raw_lower())) < 0 ||
+        string_at_index(cur_idx_).compare(*static_cast<const Slice*>(ctx->pred().raw_upper())) >= 0) {
+      sel->ClearBit(i);
+    }
+    else {
+      CHECK(out_arena->RelocateSlice(elem, out));
+    }
+    out++;
+    cur_idx_++;
+  }
+  sel->Advance(max_fetch);
+  n = i;
+  return Status::OK();
+}
+
 Status BinaryPlainBlockDecoder::CopyNextValues(size_t *n, ColumnDataView *dst) {
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);

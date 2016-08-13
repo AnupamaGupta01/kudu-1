@@ -138,9 +138,11 @@ class BlockDecoder {
   // in ctx. Mark the selection vector starting at the given offset, as
   // this offset is the current location in the CFile
   virtual Status CopyNextAndEval(ColumnEvalContext *ctx,
-                                 size_t &offset,
+                                 SelectionVectorView *sel,
                                  size_t &n,
                                  ColumnDataView *dst) {
+    // There should be no need to advance the view
+    // If this method is unimplemented, decoder-assisted eval is unsupported
     CopyNextValues(&n, dst);
     ctx->eval_complete() = false;
     return Status::OK();

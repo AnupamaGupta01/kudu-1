@@ -489,25 +489,6 @@ class CFileIterator : public ColumnIterator {
 
   // a temporary buffer for encoding
   faststring tmp_buf_;
-
-  // Used in generating dictionary metadata (e.g. predicate set)
-  // will return true only if cell is between [lower, upper)
-  static bool CompareRange(Slice& cell, const void *lower, const void *upper, bool equality) {
-    if (equality) {
-      // Given an equality predicate, only need to evaluate against the lower bound
-      return cell.compare(*static_cast<const Slice*>(lower)) == 0;
-    }
-    if (!upper) {
-      return cell.compare(*static_cast<const Slice*>(lower)) >= 0;
-    }
-    else if (!lower) {
-      return cell.compare(*static_cast<const Slice*>(upper)) < 0;
-    }
-    else {
-      return cell.compare(*static_cast<const Slice*>(lower)) >= 0 &&
-             cell.compare(*static_cast<const Slice*>(upper)) < 0;
-    }
-  }
 };
 
 } // namespace cfile

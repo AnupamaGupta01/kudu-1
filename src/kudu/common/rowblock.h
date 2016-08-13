@@ -118,6 +118,39 @@ class SelectionVector {
   gscoped_array<uint8_t> bitmap_;
 };
 
+class SelectionVectorView {
+ public:
+  explicit SelectionVectorView(SelectionVector *sel_vec, size_t first_row_idx = 0)
+    : sel_vec_(sel_vec), row_offset_(0) {
+    Advance(first_row_idx);
+  }
+  void Advance(size_t skip) {
+    DCHECK_LE(skip, sel_vec_->nrows());
+    row_offset_ += skip;
+  }
+  void SetBit(size_t row_idx) {
+    BitmapSet(sel_vec_->mutable_bitmap(), row_offset_+row_idx);
+  }
+  void ClearBit(size_t row_idx) {
+    BitmapClear(sel_vec_->mutable_bitmap(), row_offset_+row_idx);
+  }
+  void ClearBits(size_t nrows) {
+    BitmapChangeBits(sel_vec_->mutable_bitmap(), row_offset_, nrows, false);
+  }
+  size_t first_row_index() const {
+    return row_offset_;
+  }
+  uint8_t *mutable_bitmap() {
+    return sel_vec_->mutable_bitmap();
+  }
+  const uint8_t *bitmap() const {
+    return sel_vec_->bitmap();
+  }
+ private:
+  SelectionVector *sel_vec_;
+  size_t row_offset_;
+};
+
 // A block of decoded rows.
 // Wrapper around a buffer, which keeps the buffer's size, associated arena,
 // and schema. Provides convenience accessors for indexing by row, column, etc.

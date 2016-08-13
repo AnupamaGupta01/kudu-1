@@ -240,23 +240,29 @@ Status BinaryDictBlockDecoder::SeekAtOrAfterValue(const void* value_void, bool* 
 
 
 Status BinaryDictBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
-                                               size_t &offset,
+                                               SelectionVectorView *sel,
                                                size_t &n,
                                                ColumnDataView *dst) {
   if (mode_ == kPlainBinaryMode) {
-    ctx->eval_complete() = false;
-    // Could implement CopyNextAndEval for every block
-    // These could copy and evaluate Slice-by-Slice
-    return data_decoder_->CopyNextValues(&n, dst);
+    // These could copy and evaluate Slice-by-Slice, removing need for eval_complete
+    // eval_complete would still be used for short-circuited decoders that aren't dict encoded
+    ctx->eval_complete() = true;
+    return data_decoder_->CopyNextAndEval(ctx, sel, n, dst);
+    // TODO: implement CopyNextAndEval for all blocks
+    // TODO: sort block
+    // case: bitpacked block, if a block says it can be skipped, eval_complete is true
+    // eval_complete ultimately becomes an indicator of whether the block supports evaluation
   }
 
   ctx->eval_complete() = true;
   // IsNotNull predicates should return all data
   if (ctx->pred().predicate_type() == PredicateType::IsNotNull) {
+    sel->Advance(n);
     return CopyNextDecodeStrings(&n, dst);
   }
   // None predicates or unsatisfied predicates should return no data
   if (!pred_set_->AnySelected() || ctx->pred().predicate_type() == PredicateType::None) {
+    sel->ClearBits(n);
     return Status::OK();
   }
 
@@ -266,21 +272,22 @@ Status BinaryDictBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
   codeword_buf_.resize(n*sizeof(uint32_t));
   d_bptr->CopyNextValuesToArray(&n, codeword_buf_.data());
 
-  // iterate through the data and check which satisfy the predicate
+  // Iterate through the data and check which satisfy the predicate
   Slice* out = reinterpret_cast<Slice*>(dst->data());
   Arena* out_arena = dst->arena();
   for (size_t i = 0; i < n; i++) {
     uint32_t codeword = *reinterpret_cast<uint32_t*>(&codeword_buf_[i*sizeof(uint32_t)]);
-    Slice elem = dict_decoder_->string_at_index(codeword);
+    // Test for predicate inclusion
     if (BitmapTest(pred_set_->bitmap(), codeword)) {
-      CHECK(out_arena->RelocateSlice(elem, out));
+      CHECK(out_arena->RelocateSlice(dict_decoder_->string_at_index(codeword), out));
     }
     else {
-      BitmapClear(ctx->sel()->mutable_bitmap(), offset+i);
+      // Mark the selection vector
+      sel->ClearBit(i);
     }
     out++;
   }
-  offset += n;
+  sel->Advance(n);
   return Status::OK();
 }
 
