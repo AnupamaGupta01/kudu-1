@@ -275,11 +275,11 @@ Status BinaryPlainBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
   size_t i;
   for (i = 0; i < max_fetch; i++) {
     Slice elem(string_at_index(cur_idx_));
-    if (!ctx->pred().EvaluateCell(static_cast<const void *>(&elem))) {
-      sel->ClearBit(i);
+    if (ctx->pred().EvaluateCell(static_cast<const void *>(&elem))) {
+      CHECK(out_arena->RelocateSlice(elem, out));
     }
     else {
-      CHECK(out_arena->RelocateSlice(elem, out));
+      sel->ClearBit(i);
     }
     out++;
     cur_idx_++;

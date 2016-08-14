@@ -86,9 +86,7 @@ class TestRandomAccess : public KuduTabletTest {
     // Check that a read yields what we expect.
     string val_in_table = GetRow(key);
     string cur_val_paren = "(" + cur_val + ")";
-    if (strcmp(val_in_table.c_str(), cur_val_paren.c_str())) {
-      LOG(INFO) << "strcmp";
-    }
+
     ASSERT_EQ("(" + cur_val + ")", val_in_table);
 
     vector<LocalTabletWriter::Op> pending;
