@@ -498,6 +498,8 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   RETURN_NOT_OK(PrepareColumn(ctx));
   ColumnIterator* iter = col_iters_[ctx->col_idx()];
   RETURN_NOT_OK(iter->Scan(ctx));
+
+  // If the column doesn't support decoder-evaluation, evaluate the entire block
   if (!ctx->eval_complete()) {
     ctx->pred().Evaluate(*ctx->block(), ctx->sel());
     ctx->eval_complete() = true;

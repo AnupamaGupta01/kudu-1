@@ -734,7 +734,7 @@ Status CFileIterator::PrepareForNewSeek() {
       pred_set_->SetAllFalse();
       for (size_t i = 0; i < nwords; i++) {
         Slice cur_string = dict_decoder_->string_at_index(i);
-        if (ctx_->pred().EvaluateCell(cur_string)) {
+        if (ctx_->pred().EvaluateCell(static_cast<const void *>(&cur_string))) {
           BitmapSet(pred_set_->mutable_bitmap(), i);
         }
       }
@@ -1072,6 +1072,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
         count -= this_batch;
         pb->idx_in_block_ += this_batch;
         remaining_dst.Advance(this_batch);
+        remaining_sel.Advance(this_batch);
       }
     } else {
       // Fetch as many as we can from the current datablock.
@@ -1092,6 +1093,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
       rem -= this_batch;
       pb->idx_in_block_ += this_batch;
       remaining_dst.Advance(this_batch);
+      remaining_sel.Advance(this_batch);
     }
 
     // If we didn't fetch as many as requested, then it should

@@ -116,7 +116,7 @@ class ColumnPredicate {
   //
   // This should only be called a query has ranges specified
   // i.e. None predicates and IsNotNull predicates should not use this
-  bool EvaluateCell(const Slice& cell) const;
+  bool EvaluateCell(const void *cell) const;
 
   // Evaluate the predicate on every row in the column block.
   //

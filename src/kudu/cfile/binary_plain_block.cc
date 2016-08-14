@@ -275,8 +275,7 @@ Status BinaryPlainBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
   size_t i;
   for (i = 0; i < max_fetch; i++) {
     Slice elem(string_at_index(cur_idx_));
-    if (string_at_index(cur_idx_).compare(*static_cast<const Slice*>(ctx->pred().raw_lower())) < 0 ||
-        string_at_index(cur_idx_).compare(*static_cast<const Slice*>(ctx->pred().raw_upper())) >= 0) {
+    if (!ctx->pred().EvaluateCell(static_cast<const void *>(&elem))) {
       sel->ClearBit(i);
     }
     else {
@@ -285,7 +284,6 @@ Status BinaryPlainBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
     out++;
     cur_idx_++;
   }
-  sel->Advance(max_fetch);
   n = i;
   return Status::OK();
 }

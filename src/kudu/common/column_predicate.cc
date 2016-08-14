@@ -244,22 +244,22 @@ void ApplyPredicate(const ColumnBlock& block, SelectionVector* sel, P p) {
 } // anonymous namespace
 
 // -: more branching necessary, once per cell, rather than once per column
-bool ColumnPredicate::EvaluateCell(const Slice& cell) const {
+bool ColumnPredicate::EvaluateCell(const void *cell) const {
   DCHECK(predicate_type() == PredicateType::Equality ||
          predicate_type() == PredicateType::Range);
 
   if (predicate_type() == PredicateType::Equality) {
-    return cell.compare(*static_cast<const Slice*>(raw_lower())) == 0;
+    return column_.type_info()->Compare(cell, lower_) == 0;
   }
-  if (!raw_upper()) {
-    return cell.compare(*static_cast<const Slice*>(raw_lower())) >= 0;
+  if (!upper_) {
+    return column_.type_info()->Compare(cell, lower_) >= 0;
   }
-  else if (!raw_lower()) {
-    return cell.compare(*static_cast<const Slice*>(raw_upper())) < 0;
+  else if (!lower_) {
+    return column_.type_info()->Compare(cell, upper_) < 0;
   }
   else {
-    return cell.compare(*static_cast<const Slice*>(raw_lower())) >= 0 &&
-           cell.compare(*static_cast<const Slice*>(raw_upper())) < 0;
+    return column_.type_info()->Compare(cell, lower_) >= 0 &&
+            column_.type_info()->Compare(cell, upper_) < 0;
   }
 }
 

@@ -137,6 +137,9 @@ class BlockDecoder {
   // Fetch the next n values from the block that satisfy the predicate
   // in ctx. Mark the selection vector starting at the given offset, as
   // this offset is the current location in the CFile
+  //
+  // If the encoding does support evaluation, the post-condition of this
+  // function is that eval_complete is true
   virtual Status CopyNextAndEval(ColumnEvalContext *ctx,
                                  SelectionVectorView *sel,
                                  size_t &n,

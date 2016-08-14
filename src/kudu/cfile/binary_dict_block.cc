@@ -287,7 +287,6 @@ Status BinaryDictBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
     }
     out++;
   }
-  sel->Advance(n);
   return Status::OK();
 }
 
