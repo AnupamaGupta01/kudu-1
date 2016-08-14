@@ -96,11 +96,10 @@ Status DeltaApplier::InitializeSelectionVector(SelectionVector *sel_vec) {
 
 Status DeltaApplier::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   DCHECK(!first_prepare_) << "PrepareBatch() must be called at least once";
+  // Updated data cannot be evaluated using the diskrowsets only
   if (delta_iter_->HasUpdates()) {
     RETURN_NOT_OK(base_iter_->MaterializeColumn(ctx->col_idx(), ctx->block()));
     RETURN_NOT_OK(delta_iter_->ApplyUpdates(ctx->col_idx(), ctx->block()));
-    ctx->pred().Evaluate(*ctx->block(), ctx->sel());
-    ctx->eval_complete() = true;
   }
   else {
     RETURN_NOT_OK(base_iter_->EvalAndMaterializeColumn(ctx));

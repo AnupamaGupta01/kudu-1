@@ -568,6 +568,9 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     // and selection_vector is filled out appropriately. If this cannot be done by the iterator,
     // eval_complete should be set to false, and Evaluate will be called on the data.
     RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(ctx));
+    if (!eval_complete) {
+      get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
+    }
     if (!dst->selection_vector()->AnySelected()) {
       DVLOG(1) << "0/" << dst->nrows() << " passed predicate";
       return Status::OK();
