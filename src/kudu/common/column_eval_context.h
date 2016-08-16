@@ -24,10 +24,10 @@ public:
   const ColumnPredicate &pred() { return pred_; }
 
   // Location where data will be copied to
-  ColumnBlock *block() { return block_.get(); }
+  ColumnBlock *block() { return block_; }
 
   // Selection vector reflecting the result of the predicate evaluation
-  SelectionVector *sel() { return sel_.get(); }
+  SelectionVector *sel() { return sel_; }
 
   // Determines whether further evaluation is needed.
   // Set to false only if the encoding type does not support decoder evaluation
@@ -39,10 +39,10 @@ private:
   const ColumnPredicate &pred_;
 
   // ColumnBlock *block_;
-  gscoped_ptr<ColumnBlock> block_;
+  ColumnBlock *block_;
 
   //  SelectionVector *sel_;
-  gscoped_ptr<SelectionVector> sel_;
+  SelectionVector *sel_;
 
   bool &eval_complete_;
 };

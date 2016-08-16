@@ -453,7 +453,7 @@ class CFileIterator : public ColumnIterator {
   BlockHandle dict_block_handle_;
 
   // Set containing the codewords that satisfy the predicate in a dictionary
-  gscoped_ptr<SelectionVector>pred_set_;
+  std::unique_ptr<SelectionVector>pred_set_;
 
   // The currently in-use index iterator. This is equal to either
   // posidx_iter_.get(), validx_iter_.get(), or NULL if not seeked.

@@ -557,16 +557,16 @@ Status MaterializingIterator::EvalAndMaterializeBlock(RowBlock *dst) {
     // Materialize the column with the decoder's Evaluate function
     ColumnBlock dst_col(dst->column_block(get<0>(col_pred)));
     bool eval_complete = false;
-    ColumnEvalContext *ctx = new ColumnEvalContext(get<0>(col_pred),
-                                                   get<1>(col_pred),
-                                                   &dst_col,
-                                                   dst->selection_vector(),
-                                                   eval_complete);
+    ColumnEvalContext ctx(get<0>(col_pred),
+                          get<1>(col_pred),
+                          &dst_col,
+                          dst->selection_vector(),
+                          eval_complete);
 
     // Call Scan on the iterator so that dst_col gets populated with all the data for the column
     // and selection_vector is filled out appropriately. If this cannot be done by the decoder,
     // eval_complete should be set to false, and Evaluate will be called on the data.
-    RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(ctx));
+    RETURN_NOT_OK(iter_->EvalAndMaterializeColumn(&ctx));
     if (!eval_complete) {
       get<1>(col_pred).Evaluate(dst_col, dst->selection_vector());
     }
