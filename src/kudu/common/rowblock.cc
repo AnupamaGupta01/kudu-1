@@ -29,6 +29,10 @@ SelectionVector::SelectionVector(size_t row_capacity)
   CHECK_GT(n_bytes_, 0);
 }
 
+SelectionVector::~SelectionVector() {
+  bitmap_.reset();
+}
+
 void SelectionVector::Resize(size_t n_rows) {
   size_t new_bytes = BitmapSize(n_rows);
   CHECK_LE(new_bytes, bytes_capacity_);

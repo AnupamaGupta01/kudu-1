@@ -727,7 +727,9 @@ Status CFileIterator::PrepareForNewSeek() {
     dict_decoder_.reset(new BinaryPlainBlockDecoder(dict_block_handle_.data()));
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
 
-    if (ctx_) {
+
+    if (ctx_ && ctx_->pred().predicate_type() != PredicateType::IsNotNull
+             && ctx_->pred().predicate_type() != PredicateType::None) {
       // Store the codewords that satisfy the predicate to some set structure (set, unordered_set, etc.)
       size_t nwords = dict_decoder_->Count();
       pred_set_.reset(new SelectionVector(nwords));
@@ -738,9 +740,6 @@ Status CFileIterator::PrepareForNewSeek() {
           BitmapSet(pred_set_->mutable_bitmap(), i);
         }
       }
-#ifndef NDEBUG
-      LOG(INFO) << BitmapToString(pred_set_->bitmap(), pred_set_->nrows());
-#endif
     }
   }
 
@@ -1054,7 +1053,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
         size_t this_batch = nblock;
         if (not_null) {
           // TODO: Maybe copy all and shift later?
-          RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, &remaining_sel, this_batch, &remaining_dst));
+          RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(&this_batch, ctx, &remaining_sel, &remaining_dst));
           DCHECK_EQ(nblock, this_batch);
           pb->needs_rewind_ = true;
         } else {
@@ -1080,7 +1079,7 @@ Status CFileIterator::Scan(ColumnEvalContext *ctx) {
 
       // Write the block to the remaining_dst, optionally writing to sel
       // If sel gets written to, eval_complete will be set to true
-      RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(ctx, &remaining_sel, this_batch, &remaining_dst));
+      RETURN_NOT_OK(pb->dblk_->CopyNextAndEval(&this_batch, ctx, &remaining_sel, &remaining_dst));
 
       pb->needs_rewind_ = true;
       DCHECK_LE(this_batch, rem);

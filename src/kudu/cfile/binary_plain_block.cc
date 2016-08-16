@@ -255,21 +255,22 @@ Status BinaryPlainBlockDecoder::SeekAtOrAfterValue(const void *value_void, bool 
   return Status::OK();
 }
 
-Status BinaryPlainBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
-                       SelectionVectorView *sel,
-                       size_t &n,
-                       ColumnDataView *dst) {
+Status BinaryPlainBlockDecoder::CopyNextAndEval(size_t* n,
+                                                ColumnEvalContext* ctx,
+                                                SelectionVectorView* sel,
+                                                ColumnDataView* dst) {
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);
-  DCHECK_LE(n, dst->nrows());
+  DCHECK_LE(*n, dst->nrows());
   DCHECK_EQ(dst->stride(), sizeof(Slice));
 
+  ctx->eval_complete() = true;
   Arena *out_arena = dst->arena();
-  if (PREDICT_FALSE(n == 0 || cur_idx_ >= num_elems_)) {
-    n = 0;
+  if (PREDICT_FALSE(*n == 0 || cur_idx_ >= num_elems_)) {
+    *n = 0;
     return Status::OK();
   }
-  size_t max_fetch = std::min(n, static_cast<size_t>(num_elems_ - cur_idx_));
+  size_t max_fetch = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
 
   Slice *out = reinterpret_cast<Slice *>(dst->data());
   size_t i;
@@ -279,12 +280,13 @@ Status BinaryPlainBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
       CHECK(out_arena->RelocateSlice(elem, out));
     }
     else {
+//      LOG(INFO) << "PlainBlock evaluation not satisfied, key=" << sel->first_row_index()+i;
       sel->ClearBit(i);
     }
     out++;
     cur_idx_++;
   }
-  n = i;
+  *n = i;
   return Status::OK();
 }
 

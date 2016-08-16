@@ -124,6 +124,13 @@ class BlockDecoder {
   virtual Status SeekAtOrAfterValue(const void *value,
                                     bool *exact_match) = 0;
 
+  // Seek the decoder forward by a given number of rows, or to the end
+  // of the block. This is primarily used to skip over data.
+  //
+  // If n would move the index past the end of the block, set n to the
+  // number of rows to get to the end.
+  virtual Status SeekForward(size_t* n) = 0;
+
   // Fetch the next set of values from the block into 'dst'.
   // The output block must have space for up to n cells.
   //
@@ -134,19 +141,17 @@ class BlockDecoder {
   // allocated in the dst block's arena.
   virtual Status CopyNextValues(size_t *n, ColumnDataView *dst) = 0;
 
-  // Fetch the next n values from the block that satisfy the predicate
-  // in ctx. Mark the selection vector starting at the given offset, as
-  // this offset is the current location in the CFile
+  // Fetch the next n values from the block and evaluate whether they satisfy
+  // the predicate. Mark the row in the view into the selection vector, as this
+  // view denotes the current location in the CFile
   //
   // If the encoding does support evaluation, the post-condition of this
-  // function is that eval_complete is true
-  virtual Status CopyNextAndEval(ColumnEvalContext *ctx,
+  // function is that eval_complete is true, and false otherwise
+  virtual Status CopyNextAndEval(size_t *n,
+                                 ColumnEvalContext *ctx,
                                  SelectionVectorView *sel,
-                                 size_t &n,
                                  ColumnDataView *dst) {
-    // There should be no need to advance the view
-    // If this method is unimplemented, decoder-assisted eval is unsupported
-    CopyNextValues(&n, dst);
+    CopyNextValues(n, dst);
     ctx->eval_complete() = false;
     return Status::OK();
   }

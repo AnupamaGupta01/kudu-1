@@ -489,6 +489,7 @@ Status CFileSet::Iterator::MaterializeColumn(size_t col_idx, ColumnBlock *dst) {
   ColumnIterator* iter = col_iters_[col_idx];
   return iter->Scan(dst);
 }
+
 Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   CHECK_EQ(prepared_count_, ctx->block()->nrows());
   DCHECK_LT(ctx->col_idx(), col_iters_.size());
@@ -499,11 +500,6 @@ Status CFileSet::Iterator::EvalAndMaterializeColumn(ColumnEvalContext *ctx) {
   ColumnIterator* iter = col_iters_[ctx->col_idx()];
   RETURN_NOT_OK(iter->Scan(ctx));
 
-  // If the column doesn't support decoder-evaluation, evaluate the entire block
-  if (!ctx->eval_complete()) {
-    ctx->pred().Evaluate(*ctx->block(), ctx->sel());
-    ctx->eval_complete() = true;
-  }
   return Status::OK();
 }
 
