@@ -239,6 +239,7 @@ Status BinaryDictBlockDecoder::CopyNextAndEval(size_t* n,
                                                ColumnEvalContext* ctx,
                                                SelectionVectorView* sel,
                                                ColumnDataView* dst) {
+
   // Ref eval_complete is used for indicate decoders that do not support evaluation
   ctx->eval_complete() = true;
   if (mode_ == kPlainBinaryMode) {
