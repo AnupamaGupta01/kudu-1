@@ -107,6 +107,13 @@ class GVIntBlockDecoder : public BlockDecoder {
 
   Status SeekAtOrAfterValue(const void *value, bool *exact_match) OVERRIDE;
 
+  Status SeekForward(size_t* n) OVERRIDE {
+    DCHECK(HasNext());
+    *n = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
+    cur_idx_ += *n;
+    return Status::OK();
+  }
+
   Status CopyNextValues(size_t *n, ColumnDataView *dst) OVERRIDE;
 
   // Copy the integers to a temporary buffer, it is used by StringDictDecoder

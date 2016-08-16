@@ -50,6 +50,8 @@ class SelectionVector {
   // invalid.
   SelectionVector(SelectionVector *other, size_t prefix_rows);
 
+  ~SelectionVector();
+
   // Resize the selection vector to the given number of rows.
   // This size must be <= the allocated capacity.
   //
@@ -137,7 +139,7 @@ class SelectionVectorView {
   void ClearBits(size_t nrows) {
     BitmapChangeBits(sel_vec_->mutable_bitmap(), row_offset_, nrows, false);
   }
-  size_t first_row_index() const {
+  size_t first_row_index() {
     return row_offset_;
   }
   uint8_t *mutable_bitmap() {

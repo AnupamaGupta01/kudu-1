@@ -182,6 +182,13 @@ class RleBitMapBlockDecoder : public BlockDecoder {
     return Status::NotSupported("BOOL keys are not supported!");
   }
 
+  virtual Status SeekForward(size_t* n) OVERRIDE {
+    DCHECK(HasNext());
+    *n = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
+    cur_idx_ += *n;
+    return Status::OK();
+  }
+
   virtual bool HasNext() const OVERRIDE { return cur_idx_ < num_elems_; }
 
   virtual size_t Count() const OVERRIDE { return num_elems_; }
@@ -384,6 +391,13 @@ class RleIntBlockDecoder : public BlockDecoder {
 
     cur_idx_ += to_fetch;
     *n = to_fetch;
+    return Status::OK();
+  }
+
+  virtual Status SeekForward(size_t* n) OVERRIDE {
+    DCHECK(HasNext());
+    *n = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
+    cur_idx_ += *n;
     return Status::OK();
   }
 

@@ -267,6 +267,13 @@ class BShufBlockDecoder : public BlockDecoder {
     return Status::OK();
   }
 
+  Status SeekForward(size_t* n) OVERRIDE {
+    DCHECK(HasNext());
+    *n = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
+    cur_idx_ += *n;
+    return Status::OK();
+  }
+
   Status CopyNextValues(size_t* n, ColumnDataView* dst) OVERRIDE {
     DCHECK_EQ(dst->stride(), sizeof(CppType));
     return CopyNextValuesToArray(n, dst->data());

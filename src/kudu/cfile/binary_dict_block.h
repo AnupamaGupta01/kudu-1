@@ -39,12 +39,11 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <kudu/common/column_eval_context.h>
 
+#include "kudu/common/column_eval_context.h"
 #include "kudu/cfile/block_encodings.h"
 #include "kudu/cfile/block_pointer.h"
 #include "kudu/cfile/cfile.pb.h"
-#include "kudu/cfile/bshuf_block.h"
 #include "kudu/cfile/binary_plain_block.h"
 #include "kudu/gutil/gscoped_ptr.h"
 #include "kudu/gutil/map-util.h"
@@ -86,6 +85,8 @@ class BinaryDictBlockBuilder : public BlockBuilder {
 
   Status GetFirstKey(void* key) const OVERRIDE;
 
+  Status GetLastKey(void* key) const OVERRIDE;
+
   static const size_t kMaxHeaderSize = sizeof(uint32_t) * 1;
 
  private:
@@ -99,13 +100,10 @@ class BinaryDictBlockBuilder : public BlockBuilder {
 
   // dict_block_, dictionary_, dictionary_strings_arena_
   // is related to the dictionary block (one per cfile).
-  // They should NOT be clear in the Reset() method.
+  // They should NOT be cleared in the Reset() method.
   BinaryPlainBlockBuilder dict_block_;
 
-  // Use a sorted_map to avoid having to double-store StringPieces
-  std::map<StringPiece, uint32_t> dictionary_;
-  //  std::unordered_map<StringPiece, uint32_t, GoodFastHash<StringPiece> > dictionary_;
-
+  std::unordered_map<StringPiece, uint32_t, GoodFastHash<StringPiece> > dictionary_;
   // Memory to hold the actual content for strings in the dictionary_.
   //
   // The size of it should be bigger than the size limit for dictionary block
@@ -116,7 +114,7 @@ class BinaryDictBlockBuilder : public BlockBuilder {
 
   DictEncodingMode mode_;
 
-  // First key when mode_ = kCodeWodeMode
+  // First key when mode_ = kCodeWordMode
   faststring first_key_;
 };
 
@@ -130,9 +128,17 @@ class BinaryDictBlockDecoder : public BlockDecoder {
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
   virtual Status SeekAtOrAfterValue(const void* value, bool* exact_match) OVERRIDE;
   Status CopyNextValues(size_t* n, ColumnDataView* dst) OVERRIDE;
+  Status CopyNextAndEval(size_t *n,
+                         ColumnEvalContext *ctx,
+                         SelectionVectorView *sel,
+                         ColumnDataView *dst) OVERRIDE;
 
   virtual bool HasNext() const OVERRIDE {
     return data_decoder_->HasNext();
+  }
+
+  virtual Status SeekForward(size_t* n) OVERRIDE {
+    return data_decoder_->SeekForward(n);
   }
 
   virtual size_t Count() const OVERRIDE {
@@ -149,26 +155,20 @@ class BinaryDictBlockDecoder : public BlockDecoder {
 
   static const size_t kMinHeaderSize = sizeof(uint32_t) * 1;
 
-  Status CopyNextAndEval(ColumnEvalContext *ctx,
-                         SelectionVectorView *sel,
-                         size_t &n,
-                         ColumnDataView *dst) OVERRIDE;
-
 
  private:
   Status CopyNextDecodeStrings(size_t* n, ColumnDataView* dst);
-  void PrepareScan(ColumnEvalContext *ctx);
+
   Slice data_;
   bool parsed_;
-  bool prepared_;
 
   // Dictionary block decoder
   BinaryPlainBlockDecoder* dict_decoder_;
+
   gscoped_ptr<BlockDecoder> data_decoder_;
+
   SelectionVector *pred_set_;
-  //  std::unordered_set<uint32_t, IntHasher> pred_codewords_;
-  //  std::set<uint32_t> pred_codewords;
-  //  std::vector<uint32_t> pred_codewords;
+
   DictEncodingMode mode_;
 
   // buffer to hold the codewords, needed by CopyNextDecodeStrings()

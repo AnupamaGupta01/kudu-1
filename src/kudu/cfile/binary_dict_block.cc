@@ -51,7 +51,6 @@ void BinaryDictBlockBuilder::Reset() {
   buffer_.clear();
   buffer_.resize(kMaxHeaderSize);
   buffer_.reserve(options_->storage_attributes.cfile_block_size);
-
   if (mode_ == kCodeWordMode &&
       dict_block_.IsBlockFull(options_->storage_attributes.cfile_block_size)) {
     mode_ = kPlainBinaryMode;
@@ -64,7 +63,6 @@ void BinaryDictBlockBuilder::Reset() {
 
 Slice BinaryDictBlockBuilder::Finish(rowid_t ordinal_pos) {
   finished_ = true;
-
   InlineEncodeFixed32(&buffer_[0], mode_);
   // TODO: if we could modify the the Finish() API a little bit, we can
   // avoid an extra memory copy (buffer_.append(..))
@@ -176,8 +174,7 @@ Status BinaryDictBlockBuilder::GetFirstKey(void* key_void) const {
 
 BinaryDictBlockDecoder::BinaryDictBlockDecoder(Slice slice, CFileIterator* iter)
     : data_(std::move(slice)),
-      parsed_(false),
-      prepared_(false) {
+      parsed_(false) {
   dict_decoder_ = iter->GetDictDecoder();
   pred_set_ = iter->GetPredicateSet();
 }
@@ -243,21 +240,15 @@ Status BinaryDictBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
                                                SelectionVectorView *sel,
                                                size_t &n,
                                                ColumnDataView *dst) {
-  if (mode_ == kPlainBinaryMode) {
-    // These could copy and evaluate Slice-by-Slice, removing need for eval_complete
-    // eval_complete would still be used for short-circuited decoders that aren't dict encoded
-    ctx->eval_complete() = true;
-    return data_decoder_->CopyNextAndEval(ctx, sel, n, dst);
-    // TODO: implement CopyNextAndEval for all blocks
-    // TODO: sort block
-    // case: bitpacked block, if a block says it can be skipped, eval_complete is true
-    // eval_complete ultimately becomes an indicator of whether the block supports evaluation
-  }
-
+  // Ref eval_complete is used for indicate decoders that do not support evaluation
   ctx->eval_complete() = true;
+  if (mode_ == kPlainBinaryMode) {
+    // TODO: implement CopyNextAndEval for all blocks
+    // Copy from plain block and evaluate Slice-by-Slice
+    return data_decoder_->CopyNextAndEval(ctx, sel, n, dst);
+  }
   // IsNotNull predicates should return all data
   if (ctx->pred().predicate_type() == PredicateType::IsNotNull) {
-    sel->Advance(n);
     return CopyNextDecodeStrings(&n, dst);
   }
   // None predicates or unsatisfied predicates should return no data
@@ -266,7 +257,6 @@ Status BinaryDictBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
     return Status::OK();
   }
 
-  // Copy the words of the data block into a buffer so that we can easily access the UINT32s
   // Load the rows' codeword values into a buffer for scanning
   BShufBlockDecoder<UINT32>* d_bptr = down_cast<BShufBlockDecoder<UINT32>*>(data_decoder_.get());
   codeword_buf_.resize(n*sizeof(uint32_t));
@@ -277,7 +267,7 @@ Status BinaryDictBlockDecoder::CopyNextAndEval(ColumnEvalContext *ctx,
   Arena* out_arena = dst->arena();
   for (size_t i = 0; i < n; i++) {
     uint32_t codeword = *reinterpret_cast<uint32_t*>(&codeword_buf_[i*sizeof(uint32_t)]);
-    // Test for predicate inclusion
+    // If the string is in the predicate set, copy it to the output arena
     if (BitmapTest(pred_set_->bitmap(), codeword)) {
       CHECK(out_arena->RelocateSlice(dict_decoder_->string_at_index(codeword), out));
     }

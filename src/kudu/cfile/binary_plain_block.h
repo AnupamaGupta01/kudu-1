@@ -88,15 +88,22 @@ class BinaryPlainBlockDecoder : public BlockDecoder {
   virtual void SeekToPositionInBlock(uint pos) OVERRIDE;
   virtual Status SeekAtOrAfterValue(const void *value,
                                     bool *exact_match) OVERRIDE;
-  Status CopyNextAndEval(ColumnEvalContext *ctx,
-                         SelectionVectorView *sel,
-                         size_t &n,
-                         ColumnDataView *dst) OVERRIDE;
   Status CopyNextValues(size_t *n, ColumnDataView *dst) OVERRIDE;
+  Status CopyNextAndEval(size_t *n,
+                         ColumnEvalContext *ctx,
+                         SelectionVectorView *sel,
+                         ColumnDataView *dst) OVERRIDE;
 
   virtual bool HasNext() const OVERRIDE {
     DCHECK(parsed_);
     return cur_idx_ < num_elems_;
+  }
+
+  virtual Status SeekForward(size_t* n) OVERRIDE {
+    DCHECK(HasNext());
+    *n = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
+    cur_idx_ += *n;
+    return Status::OK();
   }
 
   virtual size_t Count() const OVERRIDE {

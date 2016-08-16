@@ -85,6 +85,28 @@ boost::optional<ColumnPredicate> ColumnPredicate::InclusiveRange(ColumnSchema co
   return ColumnPredicate::Range(move(column), lower, upper);
 }
 
+ColumnPredicate ColumnPredicate::ExclusiveRange(ColumnSchema column,
+                                                const void* lower,
+                                                const void* upper,
+                                                Arena* arena) {
+  CHECK(lower != nullptr || upper != nullptr);
+
+  if (lower != nullptr) {
+    // Transform the lower bound to inclusive by incrementing it.
+    // Make a copy of the value before incrementing in case it's aliased.
+    size_t size = column.type_info()->size();
+    void* buf = CHECK_NOTNULL(arena->AllocateBytes(size));
+    memcpy(buf, lower, size);
+    if (!key_util::IncrementCell(column, buf, arena)) {
+      // If incrementing the lower bound fails then the predicate can match no values.
+      return ColumnPredicate::None(move(column));
+    } else {
+      lower = buf;
+    }
+  }
+  return ColumnPredicate::Range(move(column), lower, upper);
+}
+
 ColumnPredicate ColumnPredicate::IsNotNull(ColumnSchema column) {
   CHECK(column.is_nullable());
   return ColumnPredicate(PredicateType::IsNotNull, move(column), nullptr, nullptr);
@@ -177,8 +199,8 @@ void ColumnPredicate::MergeIntoRange(const ColumnPredicate& other) {
     };
 
     case PredicateType::Equality: {
-      if (column_.type_info()->Compare(lower_, other.lower_) > 0 ||
-          column_.type_info()->Compare(upper_, other.lower_) <= 0) {
+      if ((lower_ != nullptr && column_.type_info()->Compare(lower_, other.lower_) > 0) ||
+          (upper_ != nullptr && column_.type_info()->Compare(upper_, other.lower_) <= 0)) {
         // The equality value does not fall in this range.
         SetToNone();
       } else {
@@ -202,8 +224,8 @@ void ColumnPredicate::MergeIntoEquality(const ColumnPredicate& other) {
       return;
     }
     case PredicateType::Range: {
-      if (column_.type_info()->Compare(lower_, other.lower_) < 0 ||
-          column_.type_info()->Compare(lower_, other.upper_) >= 0) {
+      if ((other.lower_ != nullptr && column_.type_info()->Compare(lower_, other.lower_) < 0) ||
+          (other.upper_ != nullptr && column_.type_info()->Compare(lower_, other.upper_) >= 0)) {
         // This equality value does not fall in the other range.
         SetToNone();
       }
@@ -250,6 +272,12 @@ bool ColumnPredicate::EvaluateCell(const void *cell) const {
 
   if (predicate_type() == PredicateType::Equality) {
     return column_.type_info()->Compare(cell, lower_) == 0;
+  }
+  else if (predicate_type() == PredicateType::IsNotNull) {
+    return true;
+  }
+  else if (predicate_type() == PredicateType::None) {
+    return false;
   }
   if (!upper_) {
     return column_.type_info()->Compare(cell, lower_) >= 0;

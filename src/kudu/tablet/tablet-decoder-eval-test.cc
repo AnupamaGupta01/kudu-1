@@ -22,11 +22,10 @@ enum Setup {
   ALL_ON_DISK
 };
 
-// These are the default values
-DEFINE_int32(nrows, 1000000, "Number of rows generated per tablet");
-DEFINE_int32(cardinality, 66666, "Cardinality of the string column");
-DEFINE_int32(strlen, 64, "Length of each word in the string column");
-DEFINE_int32(pred_upper, 21, "Upper bound on the predicate [0, p)");
+DEFINE_int32(nrows, 670000, "Number of rows generated per tablet");
+DEFINE_int32(cardinality, 60001, "Cardinality of the string column");
+DEFINE_int32(strlen, 150, "Length of each word in the string column");
+DEFINE_int32(pred_upper, 25, "Upper bound on the predicate [0, p)");
 DEFINE_int32(nrepeats, 1, "Number of times to repeat per tablet");
 DEFINE_bool(pushdown, true, "Flag to switch on/off pred pushdown");
 
@@ -98,6 +97,7 @@ public:
     ASSERT_TRUE(spec.predicates().empty()) << "Should have accepted all predicates";
 
     int fetched = 0;
+    std::vector<string> v;
     LOG_TIMING(INFO, "Filtering by string value") {
       if (FLAGS_pushdown) {
         ASSERT_OK(PushedIterateToStringList(iter.get(), fetched));
@@ -111,6 +111,7 @@ public:
     ASSERT_EQ(expected_sel_count, fetched);
     LOG(INFO) << "Nrows: " << FLAGS_nrows <<  ", Cardinality: " << FLAGS_cardinality << ", strlen: "
               << FLAGS_strlen << ", Expected: " << expected_sel_count << ", Actual: " << fetched;
+
 
     int expected_blocks_from_disk;
     int expected_rows_from_disk;

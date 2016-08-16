@@ -91,6 +91,12 @@ class BinaryPrefixBlockDecoder : public BlockDecoder {
                                     bool *exact_match) OVERRIDE;
   Status CopyNextValues(size_t *n, ColumnDataView *dst) OVERRIDE;
 
+  virtual Status SeekForward(size_t* n) OVERRIDE {
+    DCHECK(HasNext());
+    *n = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
+    cur_idx_ += *n;
+    return Status::OK();
+  }
   virtual bool HasNext() const OVERRIDE {
     DCHECK(parsed_);
     return cur_idx_ < num_elems_;
