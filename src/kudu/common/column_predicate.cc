@@ -37,6 +37,30 @@ ColumnPredicate::ColumnPredicate(PredicateType predicate_type,
       column_(move(column)),
       lower_(lower),
       upper_(upper) {
+
+  if (predicate_type == PredicateType::Equality) {
+    eval_func_ = [this] (const void* cell) {
+      return column_.type_info()->Compare(cell, lower_) == 0;
+    };
+  } else if (predicate_type == PredicateType::IsNotNull) {
+    eval_func_ = [this] (const void* cell) { return true; };
+  } else if (predicate_type == PredicateType::None) {
+    eval_func_ = [this] (const void* cell) { return false; };
+  }
+  if (upper == nullptr) {
+    eval_func_ = [this] (const void* cell) { return
+            column_.type_info()->Compare(cell, lower_) >= 0;
+    };
+  } else if (lower == nullptr) {
+    eval_func_ = [this] (const void* cell) {
+      return column_.type_info()->Compare(cell, upper_) < 0;
+    };
+  } else {
+    eval_func_ = [this] (const void* cell) {
+      return column_.type_info()->Compare(cell, lower_) >= 0 &&
+             column_.type_info()->Compare(cell, upper_) < 0;
+    };
+  }
 }
 
 ColumnPredicate ColumnPredicate::Equality(ColumnSchema column, const void* value) {
@@ -80,6 +104,28 @@ boost::optional<ColumnPredicate> ColumnPredicate::InclusiveRange(ColumnSchema co
       }
     } else {
       upper = buf;
+    }
+  }
+  return ColumnPredicate::Range(move(column), lower, upper);
+}
+
+ColumnPredicate ColumnPredicate::ExclusiveRange(ColumnSchema column,
+                                                const void* lower,
+                                                const void* upper,
+                                                Arena* arena) {
+  CHECK(lower != nullptr || upper != nullptr);
+
+  if (lower != nullptr) {
+    // Transform the lower bound to inclusive by incrementing it.
+    // Make a copy of the value before incrementing in case it's aliased.
+    size_t size = column.type_info()->size();
+    void* buf = CHECK_NOTNULL(arena->AllocateBytes(size));
+    memcpy(buf, lower, size);
+    if (!key_util::IncrementCell(column, buf, arena)) {
+      // If incrementing the lower bound fails then the predicate can match no values.
+      return ColumnPredicate::None(move(column));
+    } else {
+      lower = buf;
     }
   }
   return ColumnPredicate::Range(move(column), lower, upper);
@@ -243,30 +289,12 @@ void ApplyPredicate(const ColumnBlock& block, SelectionVector* sel, P p) {
 }
 } // anonymous namespace
 
-// -: more branching necessary, once per cell, rather than once per column
+// TODO more branching necessary, once per cell, rather than once per column
+// even though the predicate type is a constant
 bool ColumnPredicate::EvaluateCell(const void *cell) const {
   DCHECK(predicate_type() == PredicateType::Equality ||
          predicate_type() == PredicateType::Range);
-
-  if (predicate_type() == PredicateType::Equality) {
-    return column_.type_info()->Compare(cell, lower_) == 0;
-  }
-  else if (predicate_type() == PredicateType::IsNotNull) {
-    return true;
-  }
-  else if (predicate_type() == PredicateType::None) {
-    return false;
-  }
-  if (!upper_) {
-    return column_.type_info()->Compare(cell, lower_) >= 0;
-  }
-  else if (!lower_) {
-    return column_.type_info()->Compare(cell, upper_) < 0;
-  }
-  else {
-    return column_.type_info()->Compare(cell, lower_) >= 0 &&
-            column_.type_info()->Compare(cell, upper_) < 0;
-  }
+  return eval_func_(cell);
 }
 
 void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) const {

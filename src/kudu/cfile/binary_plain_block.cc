@@ -280,7 +280,6 @@ Status BinaryPlainBlockDecoder::CopyNextAndEval(size_t* n,
       CHECK(out_arena->RelocateSlice(elem, out));
     }
     else {
-//      LOG(INFO) << "PlainBlock evaluation not satisfied, key=" << sel->first_row_index()+i;
       sel->ClearBit(i);
     }
     out++;

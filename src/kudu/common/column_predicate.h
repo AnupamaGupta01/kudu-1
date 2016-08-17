@@ -83,7 +83,7 @@ class ColumnPredicate {
   //
   // The values are not copied, and must outlive the returned predicate. The
   // arena is used for allocating an incremented upper bound to transform the
-  // bound to a exclusive. The arena must outlive the returned predicate.
+  // bound to exclusive. The arena must outlive the returned predicate.
   //
   // If a normalized column predicate cannot be created, then boost::none will
   // be returned. This indicates that the predicate would cover the entire
@@ -92,6 +92,17 @@ class ColumnPredicate {
                                                          const void* lower,
                                                          const void* upper,
                                                          Arena* arena);
+
+  // Creates a new range column predicate from an exclusive lower bound and an
+  // exclusive upper bound.
+  //
+  // The values are not copied, and must outlive the returned predicate. The
+  // arena is used for allocating an incremented lower bound to transform the
+  // bound to inclusive. The arena must outlive the returned predicate.
+  static ColumnPredicate ExclusiveRange(ColumnSchema column,
+                                        const void* lower,
+                                        const void* upper,
+                                        Arena* arena);
 
   // Creates a new IS NOT NULL predicate for the column.
   static ColumnPredicate IsNotNull(ColumnSchema column);
@@ -114,7 +125,7 @@ class ColumnPredicate {
 
   // Evaluate the predicate on a single cell
   //
-  // This should only be called a query has ranges specified
+  // This should only be called when a query has ranges specified
   // i.e. None predicates and IsNotNull predicates should not use this
   bool EvaluateCell(const void *cell) const;
 
@@ -194,6 +205,8 @@ class ColumnPredicate {
 
   // The exclusive upper bound value if this is a Range predicate.
   const void* upper_;
+
+  std::function<bool(const void*)>  eval_func_;
 };
 
 // Compares predicates according to selectivity. Predicates that match fewer

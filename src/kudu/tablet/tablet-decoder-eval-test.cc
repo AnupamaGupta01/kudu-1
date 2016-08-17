@@ -39,7 +39,7 @@ public:
           : KuduTabletTest(Schema({ColumnSchema("key", INT32),
                                    ColumnSchema("int_val", INT32),
                                    ColumnSchema("string_val", STRING, false, NULL, NULL,
-                                                ColumnStorageAttributes(DICT_ENCODING, DEFAULT_COMPRESSION)) }, 1)) {
+                                                ColumnStorageAttributes(PLAIN_ENCODING, DEFAULT_COMPRESSION)) }, 1)) {
   }
 
   virtual void SetUp() OVERRIDE {
