@@ -37,30 +37,6 @@ ColumnPredicate::ColumnPredicate(PredicateType predicate_type,
       column_(move(column)),
       lower_(lower),
       upper_(upper) {
-
-  if (predicate_type == PredicateType::Equality) {
-    eval_func_ = [this] (const void* cell) {
-      return column_.type_info()->Compare(cell, lower_) == 0;
-    };
-  } else if (predicate_type == PredicateType::IsNotNull) {
-    eval_func_ = [this] (const void* cell) { return true; };
-  } else if (predicate_type == PredicateType::None) {
-    eval_func_ = [this] (const void* cell) { return false; };
-  }
-  if (upper == nullptr) {
-    eval_func_ = [this] (const void* cell) { return
-            column_.type_info()->Compare(cell, lower_) >= 0;
-    };
-  } else if (lower == nullptr) {
-    eval_func_ = [this] (const void* cell) {
-      return column_.type_info()->Compare(cell, upper_) < 0;
-    };
-  } else {
-    eval_func_ = [this] (const void* cell) {
-      return column_.type_info()->Compare(cell, lower_) >= 0 &&
-             column_.type_info()->Compare(cell, upper_) < 0;
-    };
-  }
 }
 
 ColumnPredicate ColumnPredicate::Equality(ColumnSchema column, const void* value) {
@@ -289,28 +265,8 @@ void ApplyPredicate(const ColumnBlock& block, SelectionVector* sel, P p) {
 }
 } // anonymous namespace
 
-// TODO more branching necessary, once per cell, rather than once per column
-// even though the predicate type is a constant
-bool ColumnPredicate::EvaluateCell(const void *cell) const {
-  DCHECK(predicate_type() == PredicateType::Equality ||
-         predicate_type() == PredicateType::Range);
-  return eval_func_(cell);
-}
-
-void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) const {
-  CHECK_NOTNULL(sel);
-
-  // The type-specific predicate is provided as a function template to
-  // ApplyPredicate in the hope that they are inlined.
-  //
-  // TODO: In the future we can improve this by also providing the type info as a
-  // template, so that the type-specific data comparisons can be inlined.
-  //
-  // Going a step further we could do runtime codegen to inline the
-  // lower/upper/equality bounds.
-
-  // TODO: equality predicates should use the bloomfilter if it's available.
-
+template <DataType Type>
+void ColumnPredicate::EvaluateForDataType(const ColumnBlock& block, SelectionVector* sel) const {
   switch (predicate_type()) {
     case PredicateType::None: {
       ApplyPredicate(block, sel, [] (const void*) {
@@ -321,23 +277,23 @@ void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) c
     case PredicateType::Range: {
       if (lower_ == nullptr) {
         ApplyPredicate(block, sel, [this] (const void* cell) {
-            return column_.type_info()->Compare(cell, this->upper_) < 0;
+            return DataTypeTraits<Type>::Compare(cell, this->upper_) < 0;
         });
       } else if (upper_ == nullptr) {
         ApplyPredicate(block, sel, [this] (const void* cell) {
-            return column_.type_info()->Compare(cell, this->lower_) >= 0;
+            return DataTypeTraits<Type>::Compare(cell, this->lower_) >= 0;
         });
       } else {
         ApplyPredicate(block, sel, [this] (const void* cell) {
-            return column_.type_info()->Compare(cell, this->upper_) < 0 &&
-                   column_.type_info()->Compare(cell, this->lower_) >= 0;
+            return DataTypeTraits<Type>::Compare(cell, this->upper_) < 0 &&
+                   DataTypeTraits<Type>::Compare(cell, this->lower_) >= 0;
         });
       }
       return;
     };
     case PredicateType::Equality: {
         ApplyPredicate(block, sel, [this] (const void* cell) {
-            return column_.type_info()->Compare(cell, this->lower_) == 0;
+            return DataTypeTraits<Type>::Compare(cell, this->lower_) == 0;
         });
         return;
     };
@@ -354,6 +310,66 @@ void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) c
     }
   }
   LOG(FATAL) << "unknown predicate type";
+}
+
+void ColumnPredicate::Evaluate(const ColumnBlock& block, SelectionVector *sel) const {
+  CHECK_NOTNULL(sel);
+  
+  switch (block.type_info()->physical_type()) {
+    case BOOL: return EvaluateForDataType<BOOL>(block, sel);
+    case INT8: return EvaluateForDataType<INT8>(block, sel);
+    case INT16: return EvaluateForDataType<INT16>(block, sel);
+    case INT32: return EvaluateForDataType<INT32>(block, sel);
+    case INT64: return EvaluateForDataType<INT64>(block, sel);
+    case FLOAT: return EvaluateForDataType<FLOAT>(block, sel);
+    case DOUBLE: return EvaluateForDataType<DOUBLE>(block, sel);
+    case BINARY: return EvaluateForDataType<BINARY>(block, sel);
+    default: LOG(FATAL) << "unknown data type: " << block.type_info()->physical_type();
+  }
+}
+
+// TODO: come up with an API that will only dispatch and branch once per predicate.
+// This should encompass both the data type and the predicate type
+template <DataType Type>
+bool ColumnPredicate::EvaluateCellForType(const void* cell) const {
+  switch (predicate_type()) {
+    case PredicateType::None: {
+      return false;
+    };
+    case PredicateType::Range: {
+      if (lower_ == nullptr) {
+        return DataTypeTraits<Type>::Compare(cell, this->upper_) < 0;
+      } else if (upper_ == nullptr) {
+        return DataTypeTraits<Type>::Compare(cell, this->lower_) >= 0;
+      } else {
+        return DataTypeTraits<Type>::Compare(cell, this->upper_) < 0 &&
+               DataTypeTraits<Type>::Compare(cell, this->lower_) >= 0;
+      }
+    };
+    case PredicateType::Equality: {
+      return DataTypeTraits<Type>::Compare(cell, this->lower_) == 0;
+    };
+    case PredicateType::IsNotNull: {
+      return true;
+    }
+  }
+  LOG(FATAL) << "unknown predicate type";
+}
+
+bool ColumnPredicate::EvaluateCell(DataType type, const void* cell) const {
+  switch (type) {
+    case BOOL: return EvaluateCellForType<BOOL>(cell);
+    case INT8: return EvaluateCellForType<INT8>(cell);
+    case INT16: return EvaluateCellForType<INT16>(cell);
+    case INT32: return EvaluateCellForType<INT32>(cell);
+    case INT64: return EvaluateCellForType<INT64>(cell);
+    case FLOAT: return EvaluateCellForType<FLOAT>(cell);
+    case DOUBLE: return EvaluateCellForType<DOUBLE>(cell);
+    case BINARY: return EvaluateCellForType<BINARY>(cell);
+    default: LOG(FATAL) << "unknown data type: " << type;
+  }
+  return false;
+  
 }
 
 string ColumnPredicate::ToString() const {

@@ -111,6 +111,14 @@ class ColumnPredicate {
   PredicateType predicate_type() const {
     return predicate_type_;
   }
+  
+  template <DataType Type>
+  bool EvaluateCellForType(const void* cell) const;
+
+  bool EvaluateCell(DataType type, const void* cell) const;
+
+  template <typename C>
+  bool EvaluateCellWithComparator(const void* cell, C cmp) const;
 
   // Merge another predicate into this one.
   //
@@ -127,7 +135,8 @@ class ColumnPredicate {
   //
   // This should only be called when a query has ranges specified
   // i.e. None predicates and IsNotNull predicates should not use this
-  bool EvaluateCell(const void *cell) const;
+  //bool EvaluateCell(const void *cell) const;
+  // bool EvaluateCell(const void *cell) const;
 
   // Evaluate the predicate on every row in the column block.
   //
@@ -193,6 +202,9 @@ class ColumnPredicate {
   // Merge another predicate into this Equality predicate.
   void MergeIntoEquality(const ColumnPredicate& other);
 
+  template <DataType Type>
+  void EvaluateForDataType(const ColumnBlock& block, SelectionVector* sel) const;
+
   // The type of this predicate.
   PredicateType predicate_type_;
 
@@ -205,8 +217,6 @@ class ColumnPredicate {
 
   // The exclusive upper bound value if this is a Range predicate.
   const void* upper_;
-
-  std::function<bool(const void*)>  eval_func_;
 };
 
 // Compares predicates according to selectivity. Predicates that match fewer

@@ -727,16 +727,14 @@ Status CFileIterator::PrepareForNewSeek() {
     dict_decoder_.reset(new BinaryPlainBlockDecoder(dict_block_handle_.data()));
     RETURN_NOT_OK_PREPEND(dict_decoder_->ParseHeader(), "Couldn't parse dictionary block header");
 
-
-    if (ctx_ && ctx_->pred().predicate_type() != PredicateType::IsNotNull
-             && ctx_->pred().predicate_type() != PredicateType::None) {
+    if (ctx_) {
       // Store the codewords that satisfy the predicate to some set structure (set, unordered_set, etc.)
       size_t nwords = dict_decoder_->Count();
       pred_set_.reset(new SelectionVector(nwords));
       pred_set_->SetAllFalse();
       for (size_t i = 0; i < nwords; i++) {
         Slice cur_string = dict_decoder_->string_at_index(i);
-        if (ctx_->pred().EvaluateCell(static_cast<const void *>(&cur_string))) {
+        if (ctx_->pred().EvaluateCell(BINARY, static_cast<const void *>(&cur_string))) {
           BitmapSet(pred_set_->mutable_bitmap(), i);
         }
       }

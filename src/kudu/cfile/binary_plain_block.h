@@ -7,7 +7,7 @@
 // with the License.  You may obtain a copy of the License at
 //
 //   http://www.apache.org/licenses/LICENSE-2.0
-//
+//a
 // Unless required by applicable law or agreed to in writing,
 // software distributed under the License is distributed on an
 // "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -97,6 +97,14 @@ class BinaryPlainBlockDecoder : public BlockDecoder {
                          ColumnEvalContext *ctx,
                          SelectionVectorView *sel,
                          ColumnDataView *dst) OVERRIDE;
+  template <typename P>
+  Status DoCopyNextAndEval(size_t *n,
+                           ColumnEvalContext *ctx,
+                           SelectionVectorView *sel,
+                           ColumnDataView *dst,
+                           Slice *out,
+                           Arena *out_arena,
+                           P p);
 
   virtual bool HasNext() const OVERRIDE {
     DCHECK(parsed_);

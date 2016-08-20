@@ -255,10 +255,10 @@ Status BinaryPlainBlockDecoder::SeekAtOrAfterValue(const void *value_void, bool 
   return Status::OK();
 }
 
-Status BinaryPlainBlockDecoder::CopyNextAndEval(size_t* n,
-                                                ColumnEvalContext* ctx,
-                                                SelectionVectorView* sel,
-                                                ColumnDataView* dst) {
+Status BinaryPlainBlockDecoder::CopyNextAndEval(size_t *n,
+                                                ColumnEvalContext *ctx,
+                                                SelectionVectorView *sel,
+                                                ColumnDataView *dst) {
   DCHECK(parsed_);
   CHECK_EQ(dst->type_info()->physical_type(), BINARY);
   DCHECK_LE(*n, dst->nrows());
@@ -273,19 +273,73 @@ Status BinaryPlainBlockDecoder::CopyNextAndEval(size_t* n,
   size_t max_fetch = std::min(*n, static_cast<size_t>(num_elems_ - cur_idx_));
 
   Slice *out = reinterpret_cast<Slice *>(dst->data());
+  // ctx->pred().SetType(BINARY);
   size_t i;
   for (i = 0; i < max_fetch; i++) {
     Slice elem(string_at_index(cur_idx_));
-    if (ctx->pred().EvaluateCell(static_cast<const void *>(&elem))) {
+    // if (ctx->pred().DoComparison<BINARY>(static_cast<const void *>(&elem))) {
+    if (ctx->pred().EvaluateCell(dst->type_info()->physical_type(), static_cast<const void*>(&elem))) {
       CHECK(out_arena->RelocateSlice(elem, out));
-    }
-    else {
+    } else {
       sel->ClearBit(i);
     }
     out++;
     cur_idx_++;
   }
-  *n = i;
+
+  // The benefit in doing it this way is that our dispatch is still only occurring at every block, since the lambdas can be inlined
+  // if (ctx->pred().predicate_type() == PredicateType::Range) {
+  //   if (ctx->pred().raw_upper() == nullptr) {
+  //     DoCopyNextAndEval(&max_fetch, ctx, sel, dst, out, out_arena,  [&] (const void* cell) {
+  //       return dst->type_info()->Compare(cell, ctx->pred().raw_lower()) >= 0;
+  //   });
+  //   } else if (ctx->pred().raw_lower() == nullptr) {
+  //     DoCopyNextAndEval(&max_fetch, ctx, sel, dst, out, out_arena,  [&] (const void* cell) {
+  //       return dst->type_info()->Compare(cell, ctx->pred().raw_upper()) < 0;
+  //     });
+  //   } else {
+  //     DoCopyNextAndEval(&max_fetch, ctx, sel, dst, out, out_arena,  [&] (const void* cell) {
+  //       return dst->type_info()->Compare(cell, ctx->pred().raw_upper()) < 0 &&
+  //             dst->type_info()->Compare(cell, ctx->pred().raw_lower()) >= 0;
+  //     });
+  //   }
+  // }  else if (ctx->pred().predicate_type() == PredicateType::Equality) {
+  //   DoCopyNextAndEval(&max_fetch, ctx, sel, dst, out, out_arena,  [&] (const void* cell) {
+  //     return dst->type_info()->Compare(cell, ctx->pred().raw_lower()) == 0;
+  //   });
+    
+  // } else if (ctx->pred().predicate_type() == PredicateType::None) {
+  //   DoCopyNextAndEval(&max_fetch, ctx, sel, dst, out, out_arena,  [&] (const void* cell) {
+  //     return false;
+  //   });
+  // } else if (ctx->pred().predicate_type() == PredicateType::IsNotNull) {
+  //   DoCopyNextAndEval(&max_fetch, ctx, sel, dst, out, out_arena,  [&] (const void* cell) {
+  //     return true;
+  //   });
+  // }
+  *n = max_fetch;
+  return Status::OK();
+}
+
+template <typename P>
+Status BinaryPlainBlockDecoder::DoCopyNextAndEval(size_t *n,
+                                                  ColumnEvalContext *ctx,
+                                                  SelectionVectorView *sel,
+                                                  ColumnDataView *dst,
+                                                  Slice *out,
+                                                  Arena *out_arena,
+                                                  P p) {
+  for (size_t i = 0; i < *n; i++) {
+    Slice elem(string_at_index(cur_idx_));
+    if (p(static_cast<const void *>(&elem))) {
+      CHECK(out_arena->RelocateSlice(elem, out));
+    } else {
+      sel->ClearBit(i);
+    }
+    out++;
+    cur_idx_++;
+
+  }
   return Status::OK();
 }
 
