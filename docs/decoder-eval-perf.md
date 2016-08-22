@@ -4,6 +4,7 @@ Note: the experiments and plots were performed and generated with:
 * 50 samples each
 * the x-axis denoting the string lengths
 * repeating values of specified cardinality (e.g. cardinality 4: [0,1,2,3,0,1,2,3,0,1,2,3])
+* each dataset contained 1M rows
 
 # Dictionary Encoding
 
@@ -22,7 +23,7 @@ For queries with higher selectivity, fewer results are returned, and we can thus
 
 ![Performance 1.5](https://raw.githubusercontent.com/anjuwong/kudu/565e2c4e56f57ca738fcec73054d9297b9f72084/docs/images/decoder_eval_perf_1.5.png)
 
-Note that because the cells are being evaluated individually rather than in batches, the predicate comparator is determined once per cell instead of once per batch. This led to a fairly significant dip in performance, as the comparator had been determined completely dynamically. See the above plot and compare it against the plot above it on the right and note that the slower speed. To alleviate this, the evaluation has been templatized to remediate the cost of the repeated comparator dispatch.
+Note that because the cells are being evaluated individually rather than in batches, the predicate comparator is determined once per cell instead of once per batch. This led to a fairly significant dip in performance, as the comparator was being determined completely dynamically for every row. See the above plot and compare it against the plot above it on the right and note the slower speed. To alleviate this, the evaluation has been templatized to remediate the cost of the repeated comparator dispatch.
 
 ## Low cardinality
 
