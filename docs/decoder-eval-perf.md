@@ -43,6 +43,6 @@ Overall, slightly worse performance is observed when it comes to queries with lo
 Left: high cardinality, Right: low cardinality, all strings selected
 
 ## High selectivity
-![Performance 4](hatps://raw.githubusercontent.com/anjuwong/kudu/565e2c4e56f57ca738fcec73054d9297b9f72084/docs/images/decoder_eval_perf_4.png)
+![Performance 4](https://raw.githubusercontent.com/anjuwong/kudu/565e2c4e56f57ca738fcec73054d9297b9f72084/docs/images/decoder_eval_perf_4.png)
 Left: high cardinality (1/1M strings selected), Right: low cardinality (1/100 strings selected)
 
