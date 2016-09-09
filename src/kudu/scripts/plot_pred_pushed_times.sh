@@ -1,14 +1,21 @@
 #!/bin/bash -e
-# Calls tablet-decoder-eval-test with command line arguments:
+# Calls tablet-parameterized-test with command line arguments:
 #   $1: nrows
 #   $2: cardinality
 #   $3: strlen
 #   $4: predicate upperbound
-# Outputs are pushed to test-logs/tablet-decoder-eval-test.txt
+# Outputs are pushed to test-logs/tablet-parameterized-test.txt
 
 LOG_DIR_NAME="build/release/test-logs"
 BASE_DIR="../../.."
 LOGDIR="$BASE_DIR/$LOG_DIR_NAME"
-KUDU_ALLOW_SLOW_TESTS=true
-log=$LOGDIR/tablet-decoder-eval-test.txt
-KUDU_ALLOW_SLOW_TESTS=true ../../../build/release/bin/tablet-decoder-eval-test --nrows=$1 --cardinality=$2 --strlen=$3 --pred_upper=$4 --nrepeats=$5 --pushdown=$6 --gtest_filter=* &> $log 
+log=$LOGDIR/tablet-parameterized-test.txt
+../../../build/release/bin/tablet-parameterized-test\
+           --tablet_param_test_nrows=$1\
+           --tablet_param_test_cardinality=$2\
+           --tablet_param_test_strlen=$3\
+           --tablet_param_test_lower=$4\
+           --tablet_param_test_upper=$5\
+           --tablet_param_test_nrepeats=$6\
+           --materializing_iterator_decoder_eval=$7\
+           --gtest_filter=* &> $log 
