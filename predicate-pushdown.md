@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Apache Kudu, Now Faster Than Ever [working title]"
+title: "Pushing Down Predicates in Apache Kudu"
 author: Andrew Wong
 ---
 
@@ -34,13 +34,13 @@ string is assigned a numeric _codeword_, and the column is stored numerically
 on disk. When materializing a dictionary block, all of the numeric data are
 scanned and all of the corresponding strings are buffered for evaluation. When
 the vocabulary of a dictionary-encoded block gets too large, Kudu will
-automatically switch to plain encoding.
+automatically switch to _plain encoding_.
 
 In plain-encoded blocks, strings are stored back-to-back, and the character
 offsets to the start of each word are stored as a list of integers. When
 materializing, all of the strings are copied to a buffer for evaluation.
 
-Therein lies a room for improvement: this predicate evaluation path is the same
+Therein lies room for improvement: this predicate evaluation path is the same
 for all data types and encoding types. Within the tablet, the correct cfiles
 are determined, the cfiles’ decoders are opened, all of the data are copied to
 a buffer, and the predicate is evaluated on this buffered data via
@@ -80,35 +80,36 @@ but having decoders support evaluation leaves the door open for other encoding
 types to extend this idea.
 
 ## Performance
-My benchmarks were done using a dataset consisting of repeating strings
-of a tunable length and a tunable cardinality. This allowed me to adjust the
-size of my dictionary and of my result set, and see the improvements in a very
-controlled way.
+Depending on the dataset and query, predicate pushdown can lead to significant
+improvements. Tablet scans were timed with datasets consisting of repeated
+strings of tunable length and tunable cardinality. 
 
-[]
-Select value out of range (EMPTY), select specific value in range (EQUAL),
-select half of the range (HALF), select full range of values (ALL)
+![png]({{ site.github.url }}/img/predicate-pushdown/cardinality-10.png)
+The above tablet scan times were recorded using a dataset of ten million rows of
+strings with length ten. Predicates were designed to select values out of bounds
+(Empty), a single value (Equal, i.e. for cardinality _k_, this would select one
+_k_th of the dataset), half of the full range (Half), and the full range of
+values (All).
 
+The behavior for ...
 While still returning no values, the original evaluation path must still copy
 and scan through the tablet to determine whether any values match.
 
 Note that for dictiony encoding, given a low cardinality, Kudu can completely
 rely on the dictionary codewords to evaluate, making the query significantly
 faster. At higher cardinalities, the dictionaries completely fill up and the
-blocks fall back plain encoding, and the slower performance reflects this.
-There is still a performance boost for plain encoding. Since the result set is
-empty, eager pre-buffering data for batched evaluation is avoided. 
+blocks fall back plain encoding, and the slower, albeit still improved,
+performance reflects this.
 
-[]
-Select "x" (EMPTY), Select == "1993-08-20" (EQUAL), Select < "1998-01-01"
-(FEW), Select > "0" (ALL)
+![png]({{ site.github.url }}/img/predicate-pushdown/cardinality-10M.png)
 
 Similar predicates were run with the TPC-H dataset, querying on the shipdate
 column.
 
+## Conclusion
 
 This summer has been a phenomenal learning experience for me, in terms of the
-tools, the workflow, the datasets, the thought processes that go into building
+tools, the workflow, the datasets, the thought-processes that go into building
 something at Kudu’s scale. I can’t express enough how grateful I am for the
 amount of support I got from the Kudu team, from the intern coordinators, and
 from the Cloudera community as a whole.
