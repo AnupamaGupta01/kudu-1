@@ -84,8 +84,8 @@ Depending on the dataset and query, predicate pushdown can lead to significant
 improvements. Tablet scans were timed with datasets consisting of repeated
 strings of tunable length and tunable cardinality. 
 
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10.png)
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10M.png)
+![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10.png){: .img-responsive}
+![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10M.png){: .img-responsive}
 
 The above tablet scan times were recorded using a dataset of ten million rows of
 strings with length ten. Predicates were designed to select values out of bounds
@@ -106,7 +106,7 @@ faster. At higher cardinalities, the dictionaries completely fill up and the
 blocks fall back on plain encoding. The slower, albeit still improved, the
 performance on the dataset containing 10M unique values reflects this.
 
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-tpch.png)
+![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-tpch.png){: .img-responsive}
 
 Similar predicates were run with the TPC-H dataset, querying on the shipdate
 column. The full path of a query consists not only of the scanning itself, but
@@ -117,6 +117,7 @@ on the scan path still yield substantial improvements to the query as a whole.
 Pushing down predicates in Kudu yielded substantial improvements to the scan
 path. For dictionary encoding, pushdown can be particularly powerful, depending
 on the dataset, and other encoding types are either uneffected or also improved.
+This change has been commited and pushed to the main branch of Kudu.
 
 This summer has been a phenomenal learning experience for me, in terms of the
 tools, the workflow, the datasets, the thought-processes that go into building
