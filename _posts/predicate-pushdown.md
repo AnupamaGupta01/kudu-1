@@ -7,12 +7,13 @@ author: Andrew Wong
 I had the pleasure of interning with the Apache Kudu team this summer. I am
 extremely thankful for all of the mentoring and support I received, and that I
 got to be a part of Kudu’s journey from incubating to Top Level Apache project
-to, soon enough, General Availability. This project was my summer contribution
-to Kudu: a restructuring of the scan path to speed up queries.
+to General Availability. This project was my summer contribution to Kudu: a
+restructuring of the scan path to speed up queries.
 
 <!--more-->
 
 ## A Day in the Life of a Query
+
 Because Kudu is a columnar storage engine, its scan path has a number of
 optimizations to avoid extraneous reads, copies, and computation. When a query
 is sent to a tablet server, the server prunes tablets based on the
@@ -48,6 +49,7 @@ type-specific comparators. This path is extremely flexible, but because it was
 designed to be encoding-independent, there is room for improvements.
 
 ## Trimming the Fat
+
 The first step is to allow the decoders access to the predicate. In doing so,
 each encoding type can specialize its evaluation. Additionally, this puts the
 decoder in a position where it can determine whether a given row satisfies the
@@ -84,14 +86,14 @@ Depending on the dataset and query, predicate pushdown can lead to significant
 improvements. Tablet scans were timed with datasets consisting of repeated
 strings of tunable length and tunable cardinality. 
 
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10.png){: .img-responsive}
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10M.png){: .img-responsive}
+![png](https://raw.githubusercontent.com/anjuwong/kudu/10b9ac14915d991463bfd42d1126b61ac53c1df4/img/predicate-pushdown/pushdown-10.png)
+![png](https://raw.githubusercontent.com/anjuwong/kudu/10b9ac14915d991463bfd42d1126b61ac53c1df4/img/predicate-pushdown/pushdown-10M.png)
 
-The above tablet scan times were recorded using a dataset of ten million rows of
-strings with length ten. Predicates were designed to select values out of bounds
-(Empty), select a single value (Equal, i.e. for cardinality _k_, this would
-select one _k_th of the dataset), select half of the full range (Half), and
-select the full range of values (All).
+The above plots show the time taken to scan a single tablet, recorded using a
+dataset of ten million rows of strings with length ten. Predicates were designed
+to select values out of bounds (Empty), select a single value (Equal, i.e. for
+cardinality _k_, this would select one _k_th of the dataset), select half of the
+full range (Half), and select the full range of values (All).
 
 With the original evaluation implementation, the tablet must still copy and scan
 through the tablet to determine whether any values match. This means that even
@@ -106,14 +108,17 @@ faster. At higher cardinalities, the dictionaries completely fill up and the
 blocks fall back on plain encoding. The slower, albeit still improved, the
 performance on the dataset containing 10M unique values reflects this.
 
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-tpch.png){: .img-responsive}
+![png](https://raw.githubusercontent.com/anjuwong/kudu/10b9ac14915d991463bfd42d1126b61ac53c1df4/img/predicate-pushdown/pushdown-tpch.png)
 
 Similar predicates were run with the TPC-H dataset, querying on the shipdate
-column. The full path of a query consists not only of the scanning itself, but
-also RPCs and data transfer to the caller. Regardless, signficant improvements
-on the scan path still yield substantial improvements to the query as a whole.
+column. The full path of a query consists not only of the tablet scanning
+itself, but also RPCs and data transfer to the caller. Regardless, signficant
+improvements on the scan path still yield substantial improvements to the query
+as a whole.  The plot above demonstrates the end-to-end behavior of predicate
+pushdown.
 
 ## Conclusion
+
 Pushing down predicates in Kudu yielded substantial improvements to the scan
 path. For dictionary encoding, pushdown can be particularly powerful, depending
 on the dataset, and other encoding types are either uneffected or also improved.
