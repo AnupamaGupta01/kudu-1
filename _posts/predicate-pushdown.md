@@ -1,16 +1,26 @@
 ---
 layout: post
-title: "Pushing Down Predicates in Apache Kudu"
+title: "Pushing Down Predicate Evaluation in Apache Kudu"
 author: Andrew Wong
 ---
 
-I had the pleasure of interning with the Apache Kudu team this summer. I am
-extremely thankful for all of the mentoring and support I received, and that I
-got to be a part of Kudu’s journey from incubating to Top Level Apache project
-to General Availability. This project was my summer contribution to Kudu: a
-restructuring of the scan path to speed up queries.
+I had the pleasure of interning with the Apache Kudu team at Cloudera this
+summer. This project was my summer contribution to Kudu: a restructuring of the
+scan path to speed up queries.
 
 <!--more-->
+
+## Introduction
+
+In Kudu, _predicate pushdown_ refers to the way in which predicates are
+handled. When a scan is requested in Kudu, its predicate is passed through the
+different layers of its storage hierarchy, allowing for pruning and other
+optimizations to happen at each level before reaching the underlying data.
+
+While predicates are pushed down, evaluation itself occurs at a fairly high
+level, precluding the evaluation process from certain data-specific
+optimizations, As I will show, these optimizations can make tablet scans 10
+times faster, if not more.
 
 ## A Day in the Life of a Query
 
@@ -64,8 +74,8 @@ results can be greatly reduced. The string comparisons can be swapped out
 with evaluation based on the codewords, in which case the room for improvement
 then boils down to how to most quickly determine whether or not a given
 codeword corresponds to a string that satisfies the predicate. Dictionary
-columns will now use a bitset to store the codewords that match the predicates. 
-It will then scans through the integer-valued data and checks the bitset to
+columns will now use a bitset to store the codewords that match the predicates.
+It will then scan through the integer-valued data and checks the bitset to
 determine whether it should copy the corresponding string over.
 
 This is great in the best case scenario where a column’s dictionary is small,
@@ -84,7 +94,7 @@ types to extend this idea.
 ## Performance
 Depending on the dataset and query, predicate pushdown can lead to significant
 improvements. Tablet scans were timed with datasets consisting of repeated
-string patterns of tunable length and tunable cardinality. 
+string patterns of tunable length and tunable cardinality.
 
 ![png](https://raw.githubusercontent.com/anjuwong/kudu/10b9ac14915d991463bfd42d1126b61ac53c1df4/img/predicate-pushdown/pushdown-10.png)
 ![png](https://raw.githubusercontent.com/anjuwong/kudu/10b9ac14915d991463bfd42d1126b61ac53c1df4/img/predicate-pushdown/pushdown-10M.png)
@@ -97,12 +107,12 @@ full range (Half), and select the full range of values (All).
 
 With the original evaluation implementation, the tablet must copy and scan
 through the tablet to determine whether any values match. This means that even
-when the result set is small, the full column is still copied. This can be seen
-in examining the above queries, as those with near-empty result sets (Empty and
-Equal) have shorter scan times than those with larger result sets (Half and
-Full).
+when the result set is small, the full column is still copied. This is avoided
+by pushing down predicates, which only copies as needed, and can be seen in the
+above queries: those with near-empty result sets (Empty and Equal) have shorter
+scan times than those with larger result sets (Half and Full).
 
-Note that for dictiony encoding, given a low cardinality, Kudu can completely
+Note that for dictionary encoding, given a low cardinality, Kudu can completely
 rely on the dictionary codewords to evaluate, making the query significantly
 faster. At higher cardinalities, the dictionaries completely fill up and the
 blocks fall back on plain encoding. The slower, albeit still improved,
@@ -112,20 +122,25 @@ performance on the dataset containing 10M unique values reflects this.
 
 Similar predicates were run with the TPC-H dataset, querying on the shipdate
 column. The full path of a query consists not only of the tablet scanning
-itself, but also RPCs and data transfer to the caller. Regardless, signficant
+itself, but also RPCs and data transfer to the caller. Regardless, significant
 improvements on the scan path still yield substantial improvements to the query
 as a whole. The above demonstrates the end-to-end behavior of decoder-level
 evaluation.
 
 ## Conclusion
 
-Pushing down predicates in Kudu yielded substantial improvements to the scan
-path. For dictionary encoding, pushdown can be particularly powerful, and other
-encoding types are either uneffected or also improved. This change has been
-pushed to the main branch of Kudu.
+Pushing down predicate evaluation in Kudu yielded substantial improvements to
+the scan path. For dictionary encoding, pushdown can be particularly powerful,
+and other encoding types are either unaffected or also improved. This change has
+been pushed to the main branch of Kudu, and relevant commits can be found
+[here](https://github.com/cloudera/kudu/commit/c0f37278cb09a7781d9073279ea54b08db6e2010)
+and
+[here](https://github.com/cloudera/kudu/commit/ec80fdb37be44d380046a823b5e6d8e2241ec3da).
 
 This summer has been a phenomenal learning experience for me, in terms of the
 tools, the workflow, the datasets, the thought-processes that go into building
-something at Kudu’s scale. I can’t express enough how grateful I am for the
-amount of support I got from the Kudu team, from the intern coordinators, and
-from the Cloudera community as a whole.
+something at Kudu’s scale. I am extremely thankful for all of the mentoring and
+support I received, and that I got to be a part of Kudu’s journey from
+incubating to Top Level Apache project to 1.0. I can’t express enough how
+grateful I am for the amount of support I got from the Kudu team, from the
+intern coordinators, and from the Cloudera community as a whole.
