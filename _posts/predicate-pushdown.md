@@ -19,8 +19,8 @@ optimizations to happen at each level before reaching the underlying data.
 
 While predicates are pushed down, evaluation itself occurs at a fairly high
 level, precluding the evaluation process from certain data-specific
-optimizations. As I will show, these optimizations can make tablet scans 10
-times faster, if not more.
+optimizations. These optimizations can make tablet scans an order of magnitude
+faster, if not more.
 
 ## A Day in the Life of a Query
 
