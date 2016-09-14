@@ -45,7 +45,7 @@ string is assigned a numeric codeword, and the rows are stored numerically on
 disk. When materializing a dictionary block, all of the numeric data are scanned
 and all of the corresponding strings are buffered for evaluation. When the
 vocabulary of a dictionary-encoded cfile gets too large, the blocks begin
-switching to _plain encoding mode_ to act like a _plain-encoded_ block.
+switching to _plain encoding mode_ to act like _plain-encoded_ blocks.
 
 In a plain-encoded block, strings are stored contiguously and the character
 offsets to the start of each string are stored as a list of integers. When
