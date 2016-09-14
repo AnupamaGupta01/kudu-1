@@ -17,8 +17,8 @@ handled. When a scan is requested, its predicates are passed through the
 different layers of Kudu's storage hierarchy, allowing for pruning and other
 optimizations to happen at each level before reaching the underlying data.
 
-While predicates are pushed down, evaluation itself occurs at a fairly high
-level, precluding the evaluation process from certain data-specific
+While predicates are pushed down, predicate evaluation itself occurs at a fairly
+high level, precluding the evaluation process from certain data-specific
 optimizations. These optimizations can make tablet scans an order of magnitude
 faster, if not more.
 
@@ -142,6 +142,6 @@ This summer has been a phenomenal learning experience for me, in terms of the
 tools, the workflow, the datasets, the thought-processes that go into building
 something at Kudu’s scale. I am extremely thankful for all of the mentoring and
 support I received, and that I got to be a part of Kudu’s journey from
-incubating to a Top Level Apache project to 1.0. I can’t express enough how
-grateful I am for the amount of support I got from the Kudu team, from the
-intern coordinators, and from the Cloudera community as a whole.
+incubating to a Top Level Apache project. I can’t express enough how grateful I
+am for the amount of support I got from the Kudu team, from the intern
+coordinators, and from the Cloudera community as a whole.
