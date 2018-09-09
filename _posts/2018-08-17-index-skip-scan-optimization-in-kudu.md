@@ -23,7 +23,7 @@ CREATE TABLE metrics (
 );
 {% endhighlight %}
 
-![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png)
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png =400x400)
 *Sample rows of Table `metrics` (sorted by key columns).*
 
 
