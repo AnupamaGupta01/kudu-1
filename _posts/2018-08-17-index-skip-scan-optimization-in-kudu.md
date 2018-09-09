@@ -13,7 +13,7 @@ index skip scan (a.k.a. scan-to-seek, see section 4.1 in [1]).
 Let's begin with discussing the current query flow in Kudu.
 Consider the following table:
 
-{% highlight SQL %}
+```SQL
 CREATE TABLE metrics (
     host STRING,
     tstamp INT,
@@ -21,10 +21,11 @@ CREATE TABLE metrics (
     role STRING,
     PRIMARY KEY (host, tstamp, clusterid)
 );
-{% endhighlight %}
+```
 
-![png]({{ site.github.url }}/img/index-skip-scan/example-table.png){: .img-responsive}
-.center[Sample rows of Table `metrics` (sorted by key columns).]
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png) 
+*Sample rows of Table `metrics` (sorted by key columns).*
+
 
 In this case, by default, Kudu internally builds a primary key index (implemented as a
 [B-tree](https://en.wikipedia.org/wiki/B-tree)) for the table `metrics`.
@@ -47,12 +48,12 @@ Note that the prefix keys are sorted in the index and, all rows of a given prefi
 remaining key columns. Therefore, we can use the index to **skip** to the rows that have distinct prefix keys,
 and also satisfy the predicate on the `tstamp` column.
 For example, consider the query:
-{% highlight SQL %}
+```SQL
 SELECT clusterid FROM metrics WHERE tstamp = 100;
-{% endhighlight %}
+```
 
-![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-example-table.png){: .img-responsive}
-.center[Skip scan flow illustration. The rows in green are scanned and the rest are skipped.]
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/skip-scan-example-table.png)
+*Skip scan flow illustration. The rows in green are scanned and the rest are skipped.*
 
 The tablet server can use the index to **skip** to the first row with a distinct prefix key (`host` = helium) that
 matches the predicate (`tstamp` = 100) and then **scan** through the rows until the predicate no longer matches with
@@ -76,7 +77,7 @@ distinct prefix keys exceeds ![](http://latex.codecogs.com/gif.download?%5Csqrt%
 It will be an interesting take to further explore sophisticated heuristics to decide when
 to dynamically disable skip scan.
 
-![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-performance-graph.png){: .img-responsive}
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/skip-scan-performance-graph.png)
 
 Conclusion
 ==========
