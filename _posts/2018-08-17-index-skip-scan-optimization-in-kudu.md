@@ -23,7 +23,8 @@ CREATE TABLE metrics (
 );
 ```
 
-![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png) 
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png)
+
 Sample rows of Table `metrics` (sorted by key columns).
 
 
@@ -53,6 +54,7 @@ SELECT clusterid FROM metrics WHERE tstamp = 100;
 ```
 
 ![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/skip-scan-example-table.png)
+
 Skip scan flow illustration. The rows in green are scanned and the rest are skipped.
 
 The tablet server can use the index to **skip** to the first row with a distinct prefix key (`host` = helium) that
