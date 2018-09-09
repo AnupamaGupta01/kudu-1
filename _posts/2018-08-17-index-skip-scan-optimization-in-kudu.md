@@ -23,7 +23,7 @@ CREATE TABLE metrics (
 );
 {% endhighlight %}
 
-![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png) <!-- .element height="50%" width="50%" -->
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png) 
 *Sample rows of Table `metrics` (sorted by key columns).*
 
 
@@ -52,7 +52,7 @@ For example, consider the query:
 SELECT clusterid FROM metrics WHERE tstamp = 100;
 {% endhighlight %}
 
-![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-example-table.png){:height="500px" width="500px" .img-responsive}
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/skip-scan-example-table.png){: .img-responsive}
 *Skip scan flow illustration. The rows in green are scanned and the rest are skipped.*
 
 The tablet server can use the index to **skip** to the first row with a distinct prefix key (`host` = helium) that
@@ -77,7 +77,7 @@ distinct prefix keys exceeds ![](http://latex.codecogs.com/gif.download?%5Csqrt%
 It will be an interesting take to further explore sophisticated heuristics to decide when
 to dynamically disable skip scan.
 
-![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-performance-graph.png){:height="1000px" width="600px" .img-responsive}
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/skip-scan-performance-graph.png){: .img-responsive}
 
 Conclusion
 ==========
