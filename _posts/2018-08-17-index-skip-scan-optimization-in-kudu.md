@@ -25,7 +25,7 @@ CREATE TABLE metrics (
 
 ![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png) 
 
-.center[Sample rows of Table `metrics` (sorted by key columns).]
+.caption[Sample rows of Table `metrics` (sorted by key columns).]
 
 
 In this case, by default, Kudu internally builds a primary key index (implemented as a
