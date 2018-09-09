@@ -1,147 +1,111 @@
 ---
 layout: post
-title: "Pushing Down Predicate Evaluation in Apache Kudu"
-author: Andrew Wong
+title: "Index Skip Scan Optimization in Kudu"
+author: Anupama Gupta
 ---
 
-I had the pleasure of interning with the Apache Kudu team at Cloudera this
-summer. This project was my summer contribution to Kudu: a restructuring of the
-scan path to speed up queries.
+This summer I got the opportunity to intern with the Apache Kudu Team at Cloudera.
+My project was to optimize the Kudu scan path by implementing a technique called
+index skip scan (a.k.a. scan-to-seek, see section 4.1 in [1]).
 
 <!--more-->
 
-## Introduction
+Let's begin with discussing the current query flow in Kudu.
+Consider the following table:
 
-In Kudu, _predicate pushdown_ refers to the way in which predicates are
-handled. When a scan is requested, its predicates are passed through the
-different layers of Kudu's storage hierarchy, allowing for pruning and other
-optimizations to happen at each level before reaching the underlying data.
+{% highlight SQL %}
+CREATE TABLE metrics (
+    host STRING,
+    tstamp INT,
+    clusterid INT,
+    role STRING,
+    PRIMARY KEY (host, tstamp, clusterid)
+);
+{% endhighlight %}
 
-While predicates are pushed down, predicate evaluation itself occurs at a fairly
-high level, precluding the evaluation process from certain data-specific
-optimizations. These optimizations can make tablet scans an order of magnitude
-faster, if not more.
+![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png)
+*Sample rows of Table `metrics` (sorted by key columns).*
 
-## A Day in the Life of a Query
 
-Because Kudu is a columnar storage engine, its scan path has a number of
-optimizations to avoid extraneous reads, copies, and computation. When a query
-is sent to a tablet server, the server prunes tablets based on the
-primary key, directing the request to only the tablets that contain the key
-range of interest. Once at a tablet, only the columns relevant to the query are
-scanned. Further pruning is done over the primary key, and if the query is
-predicated on non-key columns, the entire column is scanned. The columns in a
-tablet are stored as _cfiles_, which are split into encoded _blocks_. Once the
-relevant cfiles are determined, the data are materialized by the block
-decoders, i.e. their underlying data are decoded and copied into a buffer,
-which is passed back to the tablet layer. The tablet can then evaluate the
-predicate on the batch of data and mark which rows should be returned to the
-client.
+In this case, by default, Kudu internally builds a primary key index (implemented as a
+[B-tree](https://en.wikipedia.org/wiki/B-tree)) for the table `metrics`.
+As shown in the table above, the index data is sorted by the composite of all key columns.
+When the user query contains the first key column (`host`), Kudu uses the index (as the index data is
+primarily sorted on the first key column).
 
-One of the encoding types I worked very closely with is _dictionary encoding_,
-an encoding type for strings that performs particularly well for cfiles that
-have repeating values. Rather than storing every row’s string, each unique
-string is assigned a numeric codeword, and the rows are stored numerically on
-disk. When materializing a dictionary block, all of the numeric data are scanned
-and all of the corresponding strings are buffered for evaluation. When the
-vocabulary of a dictionary-encoded cfile gets too large, the blocks begin
-switching to _plain encoding mode_ to act like _plain-encoded_ blocks.
+Now, what if the user query does not contain the first key column and instead contains `tstamp` column?
+In the above case, the `tstamp` column values are sorted with respect to `host`,
+but are not globally sorted, and as such, it's non-trivial to use the index to filter rows.
+Instead, a full table scan is done by default. Other databases may optimize such scans by building secondary indexes
+(though it might be redundant to build one on one of the primary keys). However, this isn't an option for Kudu,
+given its lack of secondary index support.
 
-In a plain-encoded block, strings are stored contiguously and the character
-offsets to the start of each string are stored as a list of integers. When
-materializing, all of the strings are copied to a buffer for evaluation.
+The question is, can Kudu do better than a full table scan here?
 
-Therein lies room for improvement: this predicate evaluation path is the same
-for all data types and encoding types. Within the tablet, the correct cfiles
-are determined, the cfiles’ decoders are opened, all of the data are copied to
-a buffer, and the predicates are evaluated on this buffered data via
-type-specific comparators. This path is extremely flexible, but because it was
-designed to be encoding-independent, there is room for improvement.
+The answer is yes! Let's observe the column preceding the `tstamp` column (we will refer to it as
+`prefix column` and it's specific value as `prefix key`). In this example, `host` is the prefix column.
+Note that the prefix keys are sorted in the index and, all rows of a given prefix key are also sorted by the
+remaining key columns. Therefore, we can use the index to **skip** to the rows that have distinct prefix keys,
+and also satisfy the predicate on the `tstamp` column.
+For example, consider the query:
+{% highlight SQL %}
+SELECT clusterid FROM metrics WHERE tstamp = 100;
+{% endhighlight %}
 
-## Trimming the Fat
+![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-example-table.png){:height="500px" width="500px" .img-responsive}
+*Skip scan flow illustration. The rows in green are scanned and the rest are skipped.*
 
-The first step is to allow the decoders access to the predicate. In doing so,
-each encoding type can specialize its evaluation. Additionally, this puts the
-decoder in a position where it can determine whether a given row satisfies the
-query, which in turn, allows the decoders to determine what data gets copied
-instead of eagerly copying all of its data to get evaluated.
+The tablet server can use the index to **skip** to the first row with a distinct prefix key (`host` = helium) that
+matches the predicate (`tstamp` = 100) and then **scan** through the rows until the predicate no longer matches with
+this prefix key. This holds true for all distinct keys of `host` such as `ubuntu`, `westeros`.
+Hence, this method is popularly known as **skip scan optimization**[2-3].
 
-Take the case of dictionary-encoded strings as an example. With the existing
-scan path, not only are all of the strings in a column copied into a buffer, but
-string comparisons are done on every row. By taking advantage of the fact that
-the data can be represented as integers, the cost of determining the query
-results can be greatly reduced. The string comparisons can be swapped out with
-evaluation based on the codewords, in which case the room for improvement boils
-down to how to most quickly determine whether or not a given codeword
-corresponds to a string that satisfies the predicate. Dictionary columns will
-now use a bitset to store the codewords that match the predicates.  It will then
-scan through the integer-valued data and checks the bitset to determine whether
-it should copy the corresponding string over.
+Performance
+==========
 
-This is great in the best case scenario where a cfile’s vocabulary is small,
-but when the vocabulary gets too large and the dictionary blocks switch to plain
-encoding mode, performance is hampered. In this mode, the blocks don’t utilize
-any dictionary metadata and end up wasting the codeword bitset. That isn’t to
-say all is lost: the decoders can still evaluate a predicate via string
-comparison, and the fact that evaluation can still occur at the decoder-level
-means the eager buffering can still be avoided.
+This optimization can speed up queries significantly, depending on the cardinality (number of distinct values) of the
+prefix column(s). The lower the prefix column cardinality, the better the skip scan performance. In fact, when the
+prefix column cardinality is high, skip scan is not a viable approach. The performance graph (obtained using the example
+schema and query pattern mentioned earlier) is shown below.
 
-Dictionary encoding is a perfect storm in that the decoders can completely
-evaluate the predicates. This is not the case for most other encoding types,
-but having decoders support evaluation leaves the door open for other encoding
-types to extend this idea.
+Based on our experiments, on up to 10 million rows per tablet (as shown below), we found that the skip scan performance
+begins to get worse with respect to the full table scan performance when the prefix column(s) cardinality
+exceeds ![](http://latex.codecogs.com/gif.download?%5Csqrt%20%7B%20%5C%23rows%5C%20in%5C%20tablet%20%7D).
+Therefore, in order to use skip scan performance benefits when possible and maintain a consistent performance with
+respect to the prefix columns cardinality, we decide to dynamically disable skip scan when the number of skips for
+distinct prefix keys exceeds ![](http://latex.codecogs.com/gif.download?%5Csqrt%20%7B%20%5C%23rows%5C%20in%5C%20tablet%20%7D).
+It will be an interesting take to further explore sophisticated heuristics to decide when
+to dynamically disable skip scan.
 
-## Performance
-Depending on the dataset and query, predicate pushdown can lead to significant
-improvements. Tablet scans were timed with datasets consisting of repeated
-string patterns of tunable length and tunable cardinality.
+![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-performance-graph.png){:height="1000px" width="600px" .img-responsive}
 
-![png](https://github.com/anjuwong/kudu/blob/gh-pages-staging/img/predicate-pushdown/pushdown-10.png)
-![png](https://github.com/anjuwong/kudu/blob/gh-pages-staging/img/predicate-pushdown/pushdown-10M.png)
+Conclusion
+==========
 
-The above plots show the time taken to completely scan a single tablet, recorded
-using a dataset of ten million rows of strings with length ten. Predicates were
-designed to select values out of bounds (Empty), select a single value (Equal,
-i.e. for cardinality _k_, this would select 1/_k_ of the dataset), select half
-of the full range (Half), and select the full range of values (All).
+Skip scan optimization in Kudu can lead to huge performance benefits that scale with the size of
+data in Kudu tables. An important point to note is that although, in the above specific example, the number of prefix
+columns is one (`host`), this approach is generalized to work with any number of prefix columns.
+Currently, this is a work-in-progress [patch](https://gerrit.cloudera.org/#/c/10983/).
 
-With the original evaluation implementation, the tablet must copy and scan
-through the tablet to determine whether any values match. This means that even
-when the result set is small, the full column is still copied. This is avoided
-by pushing down predicates, which only copies as needed, and can be seen in the
-above queries: those with near-empty result sets (Empty and Equal) have shorter
-scan times than those with larger result sets (Half and All).
+The current implementation also lays the groundwork to leverage the skip scan approach and
+optimize query processing time in the following use cases:
 
-Note that for dictionary encoding, given a low cardinality, Kudu can completely
-rely on the dictionary codewords to evaluate, making the query significantly
-faster. At higher cardinalities, the dictionaries completely fill up and the
-blocks fall back on plain encoding. The slower, albeit still improved,
-performance on the dataset containing 10M unique values reflects this.
+- Range predicates on the non-first key columns(s)
+- IN list predicates on the key column(s)
 
-![png](https://github.com/anjuwong/kudu/blob/gh-pages-staging/img/predicate-pushdown/pushdown-tpch.png)
+This was my first time working on an open source project. I thoroughly enjoyed working on this challenging problem,
+right from understanding the scan path in Kudu to working on a full fledged implementation of
+skip scan approach. I am very grateful to the Kudu Team for guiding and supporting me throughout the
+internship period.
 
-Similar predicates were run with the TPC-H dataset, querying on the shipdate
-column. The full path of a query includes not only the tablet scanning itself,
-but also RPCs and batched data transfer to the caller as the scan progresses.
-As such, the times plotted above refer to the average end-to-end time required
-to scan and return a batch of rows. Regardless of this additional overhead,
-significant improvements on the scan path still yield substantial improvements
-to the query performance as a whole.
+References
+==========
 
-## Conclusion
+[[1]](https://storage.googleapis.com/pub-tools-public-publication-data/pdf/42851.pdf): Gupta, Ashish, et al. "Mesa:
+Geo-replicated, near real-time, scalable data warehousing." Proceedings of the VLDB Endowment 7.12 (2014): 1259-1270.
 
-Pushing down predicate evaluation in Kudu yielded substantial improvements to
-the scan path. For dictionary encoding, pushdown can be particularly powerful,
-and other encoding types are either unaffected or also improved. This change has
-been pushed to the main branch of Kudu, and relevant commits can be found
-[here](https://github.com/cloudera/kudu/commit/c0f37278cb09a7781d9073279ea54b08db6e2010)
-and
-[here](https://github.com/cloudera/kudu/commit/ec80fdb37be44d380046a823b5e6d8e2241ec3da).
+[[2]](https://oracle-base.com/articles/9i/index-skip-scanning/): Index Skip Scanning - Oracle Database
 
-This summer has been a phenomenal learning experience for me, in terms of the
-tools, the workflow, the datasets, the thought-processes that go into building
-something at Kudu’s scale. I am extremely thankful for all of the mentoring and
-support I received, and that I got to be a part of Kudu’s journey from
-incubating to a Top Level Apache project. I can’t express enough how grateful I
-am for the amount of support I got from the Kudu team, from the intern
-coordinators, and from the Cloudera community as a whole.
+[[3]](https://www.sqlite.org/optoverview.html#skipscan): Skip Scan - SQLite
+
+
