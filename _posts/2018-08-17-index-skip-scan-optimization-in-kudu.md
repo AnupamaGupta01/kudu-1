@@ -52,7 +52,7 @@ For example, consider the query:
 SELECT clusterid FROM metrics WHERE tstamp = 100;
 {% endhighlight %}
 
-![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-example-table.png){:height="500px" width="500px" .img-responsive}
+![png]({{ site.github.url }}/img/index-skip-scan/skip-scan-example-table.png){: .img-responsive}
 *Skip scan flow illustration. The rows in green are scanned and the rest are skipped.*
 
 The tablet server can use the index to **skip** to the first row with a distinct prefix key (`host` = helium) that
