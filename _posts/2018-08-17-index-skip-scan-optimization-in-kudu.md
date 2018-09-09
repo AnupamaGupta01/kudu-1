@@ -13,7 +13,7 @@ index skip scan (a.k.a. scan-to-seek, see section 4.1 in [1]).
 Let's begin with discussing the current query flow in Kudu.
 Consider the following table:
 
-{% highlight SQL %}
+```SQL
 CREATE TABLE metrics (
     host STRING,
     tstamp INT,
@@ -21,7 +21,7 @@ CREATE TABLE metrics (
     role STRING,
     PRIMARY KEY (host, tstamp, clusterid)
 );
-{% endhighlight %}
+```
 
 ![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png) 
 *Sample rows of Table `metrics` (sorted by key columns).*
