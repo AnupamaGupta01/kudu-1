@@ -43,9 +43,9 @@ an encoding type for strings that performs particularly well for cfiles that
 have repeating values. Rather than storing every row’s string, each unique
 string is assigned a numeric codeword, and the rows are stored numerically on
 disk. When materializing a dictionary block, all of the numeric data are scanned
-and all of the corresponding strings are copied and buffered for evaluation.
-When the vocabulary of a dictionary-encoded cfile gets too large, the blocks
-begin switching to _plain encoding mode_ to act like _plain-encoded_ blocks.
+and all of the corresponding strings are buffered for evaluation. When the
+vocabulary of a dictionary-encoded cfile gets too large, the blocks begin
+switching to _plain encoding mode_ to act like _plain-encoded_ blocks.
 
 In a plain-encoded block, strings are stored contiguously and the character
 offsets to the start of each string are stored as a list of integers. When
@@ -96,8 +96,8 @@ Depending on the dataset and query, predicate pushdown can lead to significant
 improvements. Tablet scans were timed with datasets consisting of repeated
 string patterns of tunable length and tunable cardinality.
 
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10.png){: .img-responsive}
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10M.png){: .img-responsive}
+![png](https://github.com/anjuwong/kudu/blob/gh-pages-staging/img/predicate-pushdown/pushdown-10.png)
+![png](https://github.com/anjuwong/kudu/blob/gh-pages-staging/img/predicate-pushdown/pushdown-10M.png)
 
 The above plots show the time taken to completely scan a single tablet, recorded
 using a dataset of ten million rows of strings with length ten. Predicates were
@@ -118,7 +118,7 @@ faster. At higher cardinalities, the dictionaries completely fill up and the
 blocks fall back on plain encoding. The slower, albeit still improved,
 performance on the dataset containing 10M unique values reflects this.
 
-![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-tpch.png){: .img-responsive}
+![png](https://github.com/anjuwong/kudu/blob/gh-pages-staging/img/predicate-pushdown/pushdown-tpch.png)
 
 Similar predicates were run with the TPC-H dataset, querying on the shipdate
 column. The full path of a query includes not only the tablet scanning itself,
