@@ -23,7 +23,7 @@ CREATE TABLE metrics (
 );
 {% endhighlight %}
 
-![png]({{ site.github.url }}/img/index-skip-scan/example-table.png){:height="400px" width="400px" .img-responsive}
+![png]({{ site.github.url }}/img/predicate-pushdown/pushdown-10.png){: .img-responsive}
 *Sample rows of Table `metrics` (sorted by key columns).*
 
 
