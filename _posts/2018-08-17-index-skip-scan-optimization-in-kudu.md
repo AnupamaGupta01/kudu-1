@@ -87,10 +87,9 @@ Conclusion
 
 Skip scan optimization in Kudu can lead to huge performance benefits that scale with the size of
 data in Kudu tablets. This is a work-in-progress [patch](https://gerrit.cloudera.org/#/c/10983/).
-An important point to note is that although, in the above specific example, the number of prefix
+The current implementation works only for equality predicates on the non-first primary key
+columns. An important point to note is that although, in the above specific example, the number of prefix
 columns is one (`host`), this approach is generalized to work with any number of prefix columns.
-Secondly, the current implementation works only for equality predicates on the non-first primary key
-columns.
 
 This work also lays the groundwork to leverage the skip scan approach and optimize query processing time in the
 following use cases:
