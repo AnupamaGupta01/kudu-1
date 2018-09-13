@@ -57,11 +57,11 @@ SELECT clusterid FROM metrics WHERE tstamp = 100;
 
 Skip scan flow illustration. The rows in green are scanned and the rest are skipped.
 
-**The tablet server can use the index to skip to the first row with a distinct prefix key (`host = helium`) that
-matches the predicate (`tstamp = 100`) and then scan through the rows until the predicate no longer matches. At that
+The tablet server can use the index to **skip** to the first row with a distinct prefix key (`host = helium`) that
+matches the predicate (`tstamp = 100`) and then **scan** through the rows until the predicate no longer matches. At that
 point we would know that no more rows with `host = helium` will satisfy the predicate, and we can skip to the next
-prefix key.** This holds true for all distinct keys of `host`. Hence, this method is popularly known as
-skip scan optimization[2, 3].
+prefix key. This holds true for all distinct keys of `host`. Hence, this method is popularly known as
+**skip scan optimization**[2, 3].
 
 Performance
 ==========
