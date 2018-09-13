@@ -4,7 +4,7 @@ title: "Index Skip Scan Optimization in Kudu"
 author: Anupama Gupta
 ---
 
-This summer I got the opportunity to intern with the Apache Kudu Team at Cloudera.
+This summer I got the opportunity to intern with the Apache Kudu team at Cloudera.
 My project was to optimize the Kudu scan path by implementing a technique called
 index skip scan (a.k.a. scan-to-seek, see section 4.1 in [1]).
 
@@ -25,7 +25,7 @@ CREATE TABLE metrics (
 
 ![png](https://github.com/AnupamaGupta01/kudu-1/blob/gh-pages-staging/img/index-skip-scan/example-table.png)
 
-Sample rows of Table `metrics` (sorted by key columns).
+Sample rows of table `metrics` (sorted by key columns).
 
 
 In this case, by default, Kudu internally builds a primary key index (implemented as a
@@ -43,9 +43,9 @@ given its lack of secondary index support.
 
 The question is, can Kudu do better than a full tablet scan here?
 
-The answer is yes! Let's observe the column preceding the `tstamp` column (we will refer to it as
-"prefix column" and its specific value as "prefix key"). In this example, `host` is the prefix column.
-Note that the prefix keys are sorted in the index and, all rows of a given prefix key are also sorted by the
+The answer is yes! Let's observe the column preceding the `tstamp` column. We will refer to it as the
+"prefix column" and its specific value as the "prefix key". In this example, `host` is the prefix column.
+Note that the prefix keys are sorted in the index and that all rows of a given prefix key are also sorted by the
 remaining key columns. Therefore, we can use the index to skip to the rows that have distinct prefix keys,
 and also satisfy the predicate on the `tstamp` column.
 For example, consider the query:
@@ -86,19 +86,21 @@ Conclusion
 ==========
 
 Skip scan optimization in Kudu can lead to huge performance benefits that scale with the size of
-data in Kudu tablets. An important point to note is that although, in the above specific example, the number of prefix
+data in Kudu tablets. This is a work-in-progress [patch](https://gerrit.cloudera.org/#/c/10983/).
+An important point to note is that although, in the above specific example, the number of prefix
 columns is one (`host`), this approach is generalized to work with any number of prefix columns.
-Currently, this is a work-in-progress [patch](https://gerrit.cloudera.org/#/c/10983/).
+Secondly, the current implementation works only for equality predicates on the non-first primary key
+columns.
 
-The current implementation also lays the groundwork to leverage the skip scan approach and
-optimize query processing time in the following use cases:
+This work also lays the groundwork to leverage the skip scan approach and optimize query processing time in the
+following use cases:
 
 - Range predicates
 - In-list predicates
 
 This was my first time working on an open source project. I thoroughly enjoyed working on this challenging problem,
-right from understanding the scan path in Kudu to working on a full fledged implementation of
-skip scan approach. I am very grateful to the Kudu team for guiding and supporting me throughout the
+right from understanding the scan path in Kudu to working on a full-fledged implementation of
+the skip scan optimization. I am very grateful to the Kudu team for guiding and supporting me throughout the
 internship period.
 
 References
