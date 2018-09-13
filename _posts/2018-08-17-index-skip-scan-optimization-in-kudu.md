@@ -73,10 +73,10 @@ schema and query pattern mentioned earlier) is shown below.
 
 Based on our experiments, on up to 10 million rows per tablet (as shown below), we found that the skip scan performance
 begins to get worse with respect to the full tablet scan performance when the prefix column cardinality
-exceeds ![](http://latex.codecogs.com/gif.download?%5Csqrt%20%7B%20%5C%23rows%5C%20in%5C%20tablet%20%7D).
+exceeds ![equation](http://latex.codecogs.com/gif.download?%5Csqrt%20%7B%20%5C%23rows%5C%20in%5C%20tablet%20%7D).
 Therefore, in order to use skip scan performance benefits when possible and maintain a consistent performance in cases
 of large prefix column cardinality, we decide to dynamically disable skip scan when the number of skips for
-distinct prefix keys exceeds ![](http://latex.codecogs.com/gif.download?%5Csqrt%20%7B%20%5C%23rows%5C%20in%5C%20tablet%20%7D).
+distinct prefix keys exceeds ![equation](http://latex.codecogs.com/gif.download?%5Csqrt%20%7B%20%5C%23rows%5C%20in%5C%20tablet%20%7D).
 It will be an interesting take to further explore sophisticated heuristics to decide when
 to dynamically disable skip scan.
 
